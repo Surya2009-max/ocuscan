@@ -5,7 +5,7 @@
 <head>
     <script>
     /* One-time purge when a new build ships: old service-worker caches kept serving the previous index.js / html. */
-    (function(){var B='20261020-2';try{
+    (function(){var B='20261020-3';try{
       if(localStorage.getItem('ocu_build')===B)return;
       localStorage.setItem('ocu_build',B);
       var had=!!(navigator.serviceWorker&&navigator.serviceWorker.controller),jobs=[];
@@ -42,16 +42,25 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
     <!-- PERF-02: MediaPipe loaded lazily when user allows camera (saves ~8MB on first load) -->
     <script>
+    window._mpCdn = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/';
+    window._mpBase = location.protocol === 'file:' ? window._mpCdn : 'mediapipe/';
     window._loadMediaPipe = function() {
         if (window._mpLoaded) return Promise.resolve();
-        return new Promise((res, rej) => {
+        const load = base => new Promise((res, rej) => {
             const s = document.createElement('script');
-            s.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js';
+            s.src = base + 'face_mesh.js';
             s.crossOrigin = 'anonymous';
-            s.onload = () => { window._mpLoaded = true; res(); };
+            s.onload = res;
             s.onerror = rej;
             document.head.appendChild(s);
         });
+        return load(window._mpBase)
+            .catch(() => {
+                if (window._mpBase === window._mpCdn) throw new Error('MediaPipe script failed to load');
+                window._mpBase = window._mpCdn;
+                return load(window._mpBase);
+            })
+            .then(() => { window._mpLoaded = true; });
     };
     </script>
     <!-- PERF-03: jsPDF loaded lazily on first PDF request -->
@@ -3904,7 +3913,7 @@ body { overscroll-behavior: none; }
     </div>
 
     <script src="config.js"></script>
-    <script src="index.js?v=20261020-2"></script>
+    <script src="index.js?v=20261020-3"></script>
     <!-- ══════════════════════════════════════════════════════════
      DIOPTER / FAR POINT ENGINE
 ══════════════════════════════════════════════════════════ -->

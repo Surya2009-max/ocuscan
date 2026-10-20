@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ocuscan-shell-v5';
+const CACHE_NAME = 'ocuscan-shell-v6';
 const STATIC_ASSETS = ['/', '/main.html', '/index.js', '/config.js'];
 
 self.addEventListener('install', event => {
@@ -24,6 +24,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/') || url.pathname === '/health') return;
+  if (url.pathname.startsWith('/mediapipe/')) return;
 
   event.respondWith(
     fetch(req)

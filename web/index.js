@@ -352,7 +352,7 @@ const App = (() => {
         try{
             await Promise.race([
                 (async()=>{
-                    S.mpFaceMesh=new FaceMesh({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+                    S.mpFaceMesh=new FaceMesh({locateFile:f=>`${window._mpBase||'mediapipe/'}${f}`});
                     const isMobile=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
                     S.mpFaceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,
                         minDetectionConfidence:isMobile?.45:.6,
@@ -371,6 +371,7 @@ const App = (() => {
     }
 
     function onFaceResults(results){
+        S._mpGotResult=true;
         const lm=results.multiFaceLandmarks?.[0];
         if(!lm){S.irisPixels=null;S.distanceCm=null;S.bothEyesOpen=false;S.distHistory=[];updateDistUI(null);GESTUREALERT.tick(null,false,false,null);return}
         const vid=$('setup-video').videoWidth?$('setup-video'):$('pip-video');
@@ -615,11 +616,22 @@ const App = (() => {
                 // pump frames from the video element we already have a working stream
                 // attached to — no second camera acquisition, no race.
                 const vid=$('setup-video');
-                let pumping=true; S._mpStopPump=()=>{pumping=false};
+                let pumping=true,sendFails=0; S._mpStopPump=()=>{pumping=false};
+                S._mpGotResult=false;
+                setTimeout(()=>{if(pumping&&!S._mpGotResult)toast('📷 Face tracker is still loading. On a slow connection you can set your distance manually.',6000)},25000);
                 (function pump(){
                     if(!pumping)return;
                     if(vid.readyState>=2 && S.mpFaceMesh){
-                        S.mpFaceMesh.send({image:vid}).catch(()=>{}).finally(()=>{if(pumping)requestAnimationFrame(pump)});
+                        S.mpFaceMesh.send({image:vid}).then(()=>{sendFails=0}).catch(()=>{sendFails++}).finally(()=>{
+                            if(!pumping)return;
+                            if(sendFails>=15){
+                                pumping=false;S.mpReady=false;
+                                toast('📷 Face tracker could not start. Enter your distance manually.',6000);
+                                startFallback();
+                                return;
+                            }
+                            requestAnimationFrame(pump);
+                        });
                     } else {
                         requestAnimationFrame(pump);
                     }
