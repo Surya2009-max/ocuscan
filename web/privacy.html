@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OcuScan Pro — Privacy Policy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --brand:#1A56DB; --brand-hover:#1347C0; --brand-light:#EBF2FF;
+      --teal:#0D9E8A; --teal-light:#E6F7F5;
+      --surface:#FFFFFF; --surface-2:#F8FAFB;
+      --border:#E2E8F0;
+      --text-1:#0F172A; --text-2:#475569; --text-3:#94A3B8;
+      --warn-light:#FFFBEB; --warn:#D97706;
+    }
+    *{box-sizing:border-box}
+    body{
+      font-family:'DM Sans',system-ui,sans-serif;
+      max-width:760px; margin:0 auto; padding:64px 24px 96px;
+      color:var(--text-1); line-height:1.7;
+      background:linear-gradient(160deg,var(--surface-2) 0%,var(--brand-light) 55%,var(--teal-light) 100%);
+      background-attachment:fixed;
+    }
+    .card{ background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:44px 40px; box-shadow:0 20px 60px -30px rgba(15,23,42,.18); }
+    .eyebrow{ font-family:'Space Mono',monospace; font-size:12px; font-weight:700; letter-spacing:.24em; text-transform:uppercase; color:var(--brand); display:flex; align-items:center; gap:8px; }
+    .eyebrow::before{ content:''; width:6px; height:6px; border-radius:99px; background:var(--brand); box-shadow:0 0 0 4px var(--brand-light); }
+    h1{ font-size:34px; font-weight:700; letter-spacing:-.01em; margin:14px 0 6px; color:var(--text-1); }
+    .meta{ font-family:'Space Mono',monospace; font-size:12px; color:var(--text-3); margin-bottom:40px; }
+    .meta a{ color:var(--text-3); }
+    h2{ font-size:15px; font-weight:700; letter-spacing:.02em; margin:36px 0 12px; padding-bottom:10px; border-bottom:1px solid var(--border); color:var(--text-1); display:flex; align-items:center; gap:10px; }
+    h2 .num{ font-family:'Space Mono',monospace; font-size:12px; font-weight:700; color:var(--brand); background:var(--brand-light); border-radius:6px; padding:2px 7px; }
+    p, li{ font-size:14.5px; color:var(--text-2); }
+    ul{ padding-left:20px; margin:10px 0; }
+    li{ margin-bottom:6px; }
+    li strong, p strong{ color:var(--text-1); }
+    a{ color:var(--brand); text-decoration:underline; text-underline-offset:2px; }
+    a:hover{ color:var(--brand-hover); }
+    .callout{ background:var(--teal-light); border:1px solid rgba(13,158,138,.25); border-radius:12px; padding:14px 16px; font-size:14px; color:var(--text-1); margin:14px 0; }
+    .callout strong{ color:var(--teal); }
+    .warn-callout{ background:var(--warn-light); border:1px solid rgba(217,119,6,.25); border-radius:12px; padding:14px 16px; font-size:13.5px; color:var(--text-2); margin-top:14px; }
+    .test-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0; }
+    .test-chip{ background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--text-1); font-weight:500; }
+    footer{ text-align:center; margin-top:40px; font-family:'Space Mono',monospace; font-size:11px; color:var(--text-3); }
+    @media (max-width:600px){ .card{ padding:32px 22px; } h1{ font-size:27px; } .test-grid{ grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="eyebrow">Legal · Data Protection</div>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Last updated: August 2026 · Surya Productions · <a href="mailto:ocuscan1@gmail.com">ocuscan1@gmail.com</a></p>
+
+    <h2><span class="num">01</span>What data we collect</h2>
+    <p>When you complete a screening session, we collect the results of the tests you take:</p>
+    <div class="test-grid">
+      <div class="test-chip">👁 Visual Acuity — Snellen label, logMAR (per eye)</div>
+      <div class="test-chip">📖 Near Vision — reading acuity score (per eye)</div>
+      <div class="test-chip">🌫 Contrast Sensitivity — score, both eyes together</div>
+      <div class="test-chip">🔭 Diopter — estimated refractive power (per eye)</div>
+    </div>
+    <ul>
+      <li>Estimated viewing distance (derived from iris diameter; approximate only).</li>
+      <li>Device calibration data (pixels-per-mm, set from your on-screen ruler match).</li>
+    </ul>
+    <div class="callout"><strong>We do not record, store, or transmit any video or images from your camera.</strong> All camera processing happens locally in your browser — only the numeric results above ever reach our server.</div>
+
+    <h2><span class="num">02</span>How we use it</h2>
+    <ul>
+      <li><strong>Session processing:</strong> Results are computed on our server and returned to you as your report. Session data is deleted after 4 hours.</li>
+      <li><strong>Anonymous research:</strong> After your session, a stripped copy of your results — with no name, no session ID — is stored in our research database to improve screening accuracy. This copy contains only numeric result fields and a timestamp.</li>
+    </ul>
+
+    <h2><span class="num">03</span>Legal basis</h2>
+    <p>We process your data on the basis of your explicit consent (obtained on the consent screen before any test begins), in accordance with India's <strong>Digital Personal Data Protection Act 2023</strong> and the EU <strong>General Data Protection Regulation (GDPR)</strong>.</p>
+
+    <h2><span class="num">04</span>Data retention</h2>
+    <ul>
+      <li>Named session data (including your PDF report parameters) is deleted from our servers within <strong>4 hours</strong> of your session.</li>
+      <li>Anonymised research records are retained for <strong>2 years</strong> from the date of submission, then automatically deleted.</li>
+    </ul>
+
+    <h2><span class="num">05</span>Your rights</h2>
+    <p>You have the right to:</p>
+    <ul>
+      <li>Access the anonymised research record associated with your session.</li>
+      <li>Request deletion of your research data at any time.</li>
+      <li>Withdraw consent — this will not affect any processing already completed.</li>
+    </ul>
+    <p>To exercise these rights, email <a href="mailto:ocuscan1@gmail.com">ocuscan1@gmail.com</a> with the subject line "Data Request".</p>
+
+    <h2><span class="num">06</span>Third-party services</h2>
+    <ul>
+      <li><strong>MediaPipe (Google):</strong> Face mesh library loaded from cdn.jsdelivr.net. No data is sent to Google — the model runs entirely in your browser.</li>
+      <li><strong>Railway:</strong> Our server is hosted on Railway.app (US). Data in transit is encrypted via HTTPS/TLS.</li>
+      <li><strong>Supabase:</strong> Anonymous research data is stored in Supabase (EU region). Supabase is GDPR-compliant.</li>
+    </ul>
+
+    <h2><span class="num">07</span>Children</h2>
+    <div class="warn-callout">OcuScan Pro is not intended for users under 13. We do not knowingly collect data from children without parental consent.</div>
+
+    <h2><span class="num">08</span>Contact</h2>
+    <p>Data controller: Surya Productions. Email: <a href="mailto:ocuscan1@gmail.com">ocuscan1@gmail.com</a></p>
+  </div>
+  <footer>OCUSCAN PRO · SCREENING TOOL ONLY — NOT A SUBSTITUTE FOR PROFESSIONAL EYE CARE</footer>
+</body>
+</html>

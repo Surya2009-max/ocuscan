@@ -1,0 +1,4555 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <script>
+    /* One-time purge when a new build ships: old service-worker caches kept serving the previous index.js / html. */
+    (function(){var B='20261020-2';try{
+      if(localStorage.getItem('ocu_build')===B)return;
+      localStorage.setItem('ocu_build',B);
+      var had=!!(navigator.serviceWorker&&navigator.serviceWorker.controller),jobs=[];
+      if(navigator.serviceWorker)jobs.push(navigator.serviceWorker.getRegistrations().then(function(r){return Promise.all(r.map(function(x){return x.unregister()}))}));
+      if(window.caches)jobs.push(caches.keys().then(function(k){had=had||k.length>0;return Promise.all(k.map(function(x){return caches.delete(x)}))}));
+      Promise.all(jobs).then(function(){if(had)location.reload()});
+    }catch(e){}})();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OcuScan Pro — Vision Screening</title>
+    <meta name="description" content="Free 6-minute vision screening. Test visual acuity, near vision, and contrast sensitivity. Not a medical exam — always see an optometrist.">
+    <meta name="theme-color" content="#1A56DB">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <!-- manifest.json generated below via JS to avoid 404 on missing file -->
+    <script>
+    (function(){
+        try {
+            const m={name:'OcuScan Pro',short_name:'OcuScan',start_url:'/',display:'standalone',background_color:'#F8FAFB',theme_color:'#1A56DB',description:'Free 6-minute vision screening tool',icons:[{src:'/icon-192.png',sizes:'192x192',type:'image/png'},{src:'/icon-512.png',sizes:'512x512',type:'image/png'}]};
+            const blob=new Blob([JSON.stringify(m)],{type:'application/json'});
+            const url=URL.createObjectURL(blob);
+            const link=document.createElement('link');link.rel='manifest';link.href=url;
+            document.head.appendChild(link);
+        } catch(e){}
+    })();
+    </script>
+    <!-- Fonts — display=swap for PERF-04, subset to Latin -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Space+Mono:wght@400;700&family=Instrument+Serif:ital@0;1&display=swap&subset=latin" rel="stylesheet">
+    <!-- GSAP — must load synchronously before index.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <!-- PERF-02: MediaPipe loaded lazily when user allows camera (saves ~8MB on first load) -->
+    <script>
+    window._loadMediaPipe = function() {
+        if (window._mpLoaded) return Promise.resolve();
+        return new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js';
+            s.crossOrigin = 'anonymous';
+            s.onload = () => { window._mpLoaded = true; res(); };
+            s.onerror = rej;
+            document.head.appendChild(s);
+        });
+    };
+    </script>
+    <!-- PERF-03: jsPDF loaded lazily on first PDF request -->
+    <script>
+    window._loadJsPDF = function() {
+        if (window.jspdf) return Promise.resolve();
+        return new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+            s.onload = res; s.onerror = rej;
+            document.head.appendChild(s);
+        });
+    };
+    </script>
+
+    <style>
+        @keyframes pv-ring-fill {
+            0%   { stroke-dashoffset: 131.9; }
+            100% { stroke-dashoffset: 0; }
+        }
+
+        /* ── REDUCED MOTION: disable all non-essential animations ── */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            #bg-canvas { display: none; }
+        }
+
+        /* ── SAFE AREA: notch / dynamic island support ── */
+        :root {
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bot: env(safe-area-inset-bottom, 0px);
+        }
+        /* ══════════════════════════════════════════════════════════════
+   DESIGN TOKENS & RESET
+══════════════════════════════════════════════════════════════ */
+        :root {
+            /* ── Legacy tokens kept for test screens (intentionally dark) */
+            --navy: #020814;
+            --navy-2: #060f20;
+            --navy-3: #091828;
+            --blue: #0a6ef5;
+            --blue-light: #3d9aff;
+            --cyan: #00d4ff;
+            --cyan-dim: #009ec0;
+            --teal: #00e5b4;
+            --white: #eef3ff;
+            /* A11Y-03: Raised from #7a8fb8 → #9DB4D0 (4.6:1 on #020814) */
+            --white-dim: #9DB4D0;
+            /* A11Y-03: Raised from #1e2e4a → #2A3F5C for better bg contrast */
+            --white-faint: #2A3F5C;
+            --red: #ff4757;
+            --amber: #ffb830;
+            --green: #00e676;
+            --glass: rgba(8, 22, 58, 0.55);
+            --gb: rgba(0, 212, 255, 0.13);
+            --glow-b: 0 0 40px rgba(10, 110, 245, 0.45);
+            --glow-c: 0 0 30px rgba(0, 212, 255, 0.35);
+            --r: 16px;
+            --rs: 10px;
+            /* ── Brand tokens (light theme — used by rebrand layer) */
+            --brand:         #1A56DB;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html {
+            scroll-behavior: smooth
+        }
+
+        /* DESIGN-01: Body defaults to light — test screens override locally */
+        body {
+            font-family: 'DM Sans', sans-serif;
+            min-height: 100vh;
+            overflow: hidden;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        /* ══ PARTICLE BG ══════════════════════════════════════════════ */
+        #bg-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* ══ SCREENS ══════════════════════════════════════════════════ */
+        .screen {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0 16px 20px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .45s ease;
+            padding-top: calc(16px + var(--safe-top));
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .screen.active {
+            z-index: 11; /* FIX: the active screen always paints above stale ones, whatever the DOM order */
+            opacity: 1;
+            pointer-events: all
+        }
+
+        .screen-inner {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-bottom: 40px;
+        }
+
+        /* ── TTS TOGGLE ─────────────────────────────────────────── */
+        #tts-toggle {
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all .2s;
+            min-width: 44px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        
+
+        /* ── PULSE DOT ──────────────────────────────────────────── */
+        #top-nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 900;
+            height: calc(72px + var(--safe-top));
+            padding-top: var(--safe-top);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-left: 32px;
+            padding-right: 32px;
+        }
+
+        .nav-logo {
+            font-family: 'DM Sans', sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .nav-logo img {
+            width: 38px; height: 38px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .nav-logo-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .3
+            }
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        #nav-dist-pill {
+            font-family: 'Space Mono', monospace;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 99px;
+            border: 1px solid rgba(0, 212, 255, .25);
+            letter-spacing: .04em;
+            display: none;
+        }
+
+        #nav-eye-pill {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: .06em;
+            padding: 4px 10px;
+            border-radius: 99px;
+            display: none;
+        }
+
+        /* ══ PROGRESS BAR ════════════════════════════════════════════ */
+        #prog-wrap {
+            position: fixed;
+            top: calc(72px + var(--safe-top, 0px));
+            left: 0;
+            right: 0;
+            z-index: 899;
+            height: 3px;
+            display: none;
+        }
+
+        #prog-fill {
+            height: 100%;
+            transition: none;
+            /* ANIM-05: JS lerp handles smoothing */
+            will-change: width;
+        }
+
+        /* ══ PIP CAMERA ══════════════════════════════════════════════ */
+        #pip {
+            position: fixed;
+            bottom: 18px;
+            right: 16px;
+            z-index: 850;
+            display: none;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 5px;
+        }
+
+        #pip-box {
+            width: 128px;
+            height: 88px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--gb);
+            background: #000;
+            position: relative;
+        }
+
+        #pip-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1)
+        }
+
+        #pip-canvas {
+            position: absolute;
+            inset: 0;
+            transform: scaleX(-1)
+        }
+
+        .pip-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 12px;
+            letter-spacing: .08em;
+        }
+
+        #pip-dist-bar {
+            width: 128px;
+            height: 5px;
+            background: var(--white-faint);
+            border-radius: 99px;
+            overflow: hidden
+        }
+
+        #pip-dist-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width .3s, background .3s
+        }
+
+        #pip-dist-text {
+            font-family: 'Space Mono', monospace;
+            font-size: 12px;
+            color: var(--white-dim)
+        }
+
+        /* ══ TOAST ══════════════════════════════════════════════════ */
+        #toast {
+            position: fixed;
+            bottom: 76px;
+            left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            padding: 11px 20px;
+            z-index: 9999;
+            opacity: 0;
+            transition: all .3s;
+            pointer-events: none;
+            max-width: 340px;
+            text-align: center;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0)
+        }
+
+        /* ══ GLASS CARD ═════════════════════════════════════════════ */
+        .card {
+            background: var(--glass);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid var(--gb);
+            border-radius: var(--r);
+            padding: 24px;
+        }
+
+        /* ══ BUTTONS ════════════════════════════════════════════════ */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 13px 26px;
+            border-radius: var(--rs);
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 500;
+            font-size: 15px;
+            cursor: pointer;
+            border: none;
+            transition: all .2s;
+            letter-spacing: .01em;
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(255, 255, 255, 0);
+            transition: background .15s
+        }
+
+        .btn:active::after {
+            background: rgba(255, 255, 255, .07)
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--blue), #0450b8);
+            color: #fff;
+            box-shadow: var(--glow-b)
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 55px rgba(10, 110, 245, .65)
+        }
+
+        .btn-cyan {
+            background: linear-gradient(135deg, var(--cyan-dim), var(--cyan));
+            color: var(--navy);
+            font-weight: 700
+        }
+
+        .btn-cyan:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--glow-c)
+        }
+
+        .btn-ghost {
+            background: rgba(255, 255, 255, .04);
+            border: 1px solid rgba(255, 255, 255, .1);
+            color: var(--white)
+        }
+
+        .btn-ghost:hover {
+            background: rgba(255, 255, 255, .09);
+            border-color: rgba(255, 255, 255, .2)
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--gb);
+            color: var(--white-dim)
+        }
+
+        .btn-outline:hover {
+            border-color: var(--cyan);
+            color: var(--cyan)
+        }
+
+        .btn-danger {
+            background: rgba(255, 71, 87, .12);
+            border: 1px solid rgba(255, 71, 87, .3);
+            color: var(--red)
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 71, 87, .2)
+        }
+
+        .btn-full {
+            width: 100%
+        }
+
+        .btn-lg {
+            padding: 15px 32px;
+            font-size: 16px
+        }
+
+        .btn-sm {
+            padding: 9px 16px;
+            font-size: 12px
+        }
+
+        .btn-xs {
+            padding: 6px 12px;
+            font-size: 11px
+        }
+
+        /* ══ CHIPS ══════════════════════════════════════════════════ */
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 11px;
+            border-radius: 99px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: .05em;
+            text-transform: uppercase
+        }
+
+        
+
+        
+
+        
+
+        
+
+        
+
+        /* ══ LOADING ════════════════════════════════════════════════ */
+        #loading {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: var(--surface-2, #F8FAFB);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+        }
+
+        .load-ring {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            border: 2px solid var(--white-faint);
+            border-top-color: var(--cyan);
+            animation: spin 1s linear infinite
+        }
+
+        .load-text {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            color: var(--white-dim);
+            letter-spacing: .12em
+        }
+
+        .load-sub {
+            font-size: 11px;
+            color: var(--white-faint);
+            text-align: center;
+            max-width: 280px
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        /* ══ RETICLE ════════════════════════════════════════════════ */
+        .reticle {
+            position: relative;
+            width: 240px;
+            height: 240px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px
+        }
+
+        .rr {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid;
+            animation: rp 3.5s ease-in-out infinite
+        }
+
+        .rr:nth-child(1) {
+            width: 240px;
+            height: 240px;
+            border-color: rgba(0, 212, 255, .1);
+            animation-delay: 0s
+        }
+
+        .rr:nth-child(2) {
+            width: 192px;
+            height: 192px;
+            border-color: rgba(0, 212, 255, .18);
+            animation-delay: .3s
+        }
+
+        .rr:nth-child(3) {
+            width: 148px;
+            height: 148px;
+            border-color: rgba(10, 110, 245, .32);
+            animation-delay: .6s
+        }
+
+        .rr:nth-child(4) {
+            width: 104px;
+            height: 104px;
+            border-color: rgba(10, 110, 245, .5);
+            animation-delay: .9s
+        }
+
+        .rr:nth-child(5) {
+            width: 60px;
+            height: 60px;
+            border-color: var(--cyan);
+            animation-delay: 1.2s
+        }
+
+        .rcross {
+            position: absolute;
+            background: rgba(0, 212, 255, .25)
+        }
+
+        .rcross.v {
+            width: 1px;
+            height: 56px
+        }
+
+        .rcross.h {
+            width: 56px;
+            height: 1px
+        }
+
+        .reticle-core {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--blue) 0%, rgba(10, 110, 245, .25) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 0 28px rgba(10, 110, 245, .9), 0 0 60px rgba(10, 110, 245, .3);
+            animation: eg 2.2s ease-in-out infinite alternate;
+        }
+
+        @keyframes rp {
+
+            0%,
+            100% {
+                opacity: .6;
+                transform: scale(1)
+            }
+
+            50% {
+                opacity: 1;
+                transform: scale(1.04)
+            }
+        }
+
+        @keyframes eg {
+            from {
+                box-shadow: 0 0 20px rgba(10, 110, 245, .6), 0 0 40px rgba(10, 110, 245, .2)
+            }
+
+            to {
+                box-shadow: 0 0 40px rgba(0, 212, 255, .85), 0 0 80px rgba(0, 212, 255, .3)
+            }
+        }
+
+        /* Nav entry-screen-only buttons — shown while the calibration screen
+           (the app's entry point now that the splash screen is gone) is active */
+        .entry-only { display: none !important; }
+        body:has(#screen-calib.active) .entry-only { display: flex !important; align-items: center; }
+        /* Hamburger specifically */
+        body:has(#screen-calib.active) .nav-hamburger.entry-only { display: none !important; }
+        @media (max-width: 768px) {
+            body:has(#screen-calib.active) .nav-entry-desktop { display: none !important; }
+            body:has(#screen-calib.active) .nav-hamburger.entry-only { display: flex !important; }
+        }
+
+        .nav-what-is {
+            font-size: 15px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            transition: color .2s;
+            white-space: nowrap;
+        }
+        
+
+        .nav-contact-btn {
+            padding: 10px 26px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: 'DM Sans', sans-serif;
+            transition: background .2s, transform .15s, box-shadow .2s;
+            white-space: nowrap;
+        }
+        .nav-contact-btn:hover {
+            color: var(--navy);
+        }
+
+
+        /* ══ HAMBURGER NAV (mobile only) ══════════════════════════════ */
+        .nav-hamburger {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 5px;
+            background: var(--surface-3, #F1F5F9);
+            border: 1px solid var(--border-color, #E2E8F0);
+            border-radius: 8px;
+            padding: 0;
+            cursor: pointer;
+            /* MOB-04: enforce 44×44px touch target */
+            width: 44px; height: 44px;
+            flex-shrink: 0;
+        }
+        .nav-hamburger span {
+            display: block;
+            width: 18px; height: 2px;
+            background: var(--text-1, #0F172A);
+            border-radius: 2px;
+            transition: all .2s;
+            pointer-events: none;
+        }
+        .nav-hamburger:hover { background: var(--brand-dim, rgba(26,86,219,.1)); border-color: var(--brand, #1A56DB); }
+        .nav-hamburger:hover span { background: var(--brand, #1A56DB); }
+        #nav-drawer {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1500;
+            background: rgba(2,8,20,.7);
+            backdrop-filter: blur(4px);
+        }
+        #nav-drawer.open { display: block; }
+        #nav-drawer-inner {
+            position: absolute;
+            top: 0; right: 0;
+            width: min(320px, 85vw);
+            height: 100%;
+            background: rgba(6,12,28,.98);
+            border-left: 1px solid rgba(255,255,255,.08);
+            padding: 24px 20px;
+            transform: translateX(100%);
+            transition: transform .28s cubic-bezier(.25,.46,.45,.94);
+        }
+        #nav-drawer.open #nav-drawer-inner { transform: translateX(0); }
+        .nav-drawer-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: none;
+            border: none;
+            color: var(--white);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 16px;
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255,255,255,.06);
+            cursor: pointer;
+            transition: color .15s;
+        }
+        .nav-drawer-item:hover { color: var(--cyan); }
+
+        @media (max-width: 768px) {
+            .nav-entry-desktop { display: none !important; }
+            .nav-hamburger { display: flex !important; }
+            #top-nav { padding: 0 16px; }
+        }
+
+        /* ══ FOOTER ════════════════════════════════════════════════ */
+        #entry-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 800;
+            padding: 0 32px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity .4s;
+            height: auto;
+            min-height: 52px;
+        }
+        /* NOTE: #entry-footer's show-trigger was removed along with the header
+           above — the calibration screen is now fully chrome-free. Contact /
+           Methodology / Clear Data currently have no other entry point in the
+           app; flagged separately rather than silently relocated. */
+        .footer-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 14px 0;
+            flex-wrap: wrap;
+        }
+        .footer-brand {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .footer-logo-text {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: -.01em;
+        }
+        .footer-tagline {
+            font-family: 'Space Mono', monospace;
+            font-size: 9px;
+            letter-spacing: .04em;
+        }
+        .footer-links-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            letter-spacing: .04em;
+        }
+        .footer-link {
+            cursor: pointer;
+            text-decoration: none;
+            pointer-events: auto;
+            transition: color .15s;
+        }
+        
+        
+        @media (max-width: 600px) {
+            #entry-footer { padding: 0 16px; }
+            .footer-inner { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 0; }
+            .footer-links-row { font-size: 9px; gap: 7px; }
+        }
+
+
+        /* ══ SETUP: CAMERA & CALIBRATION ══════════════════════════ */
+        .cam-box {
+            width: 100%;
+            aspect-ratio: 4/3;
+            max-height: 260px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            position: relative;
+            border: 1px solid var(--gb);
+            margin-bottom: 12px;
+        }
+
+        #setup-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+            display: block
+        }
+
+        #face-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1)
+        }
+
+        .cam-hud {
+            position: absolute;
+            top: 8px;
+            left: 10px;
+            font-family: 'Space Mono', monospace;
+            font-size: 9px;
+            color: var(--cyan);
+            letter-spacing: .07em;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .hud-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--cyan);
+            animation: pulse-dot 1.2s infinite
+        }
+
+        .cam-hud-metric {
+            position: absolute;
+            bottom: 8px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .hud-pill {
+            background: rgba(2, 8, 20, .8);
+            border: 1px solid var(--gb);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-family: 'Space Mono', monospace;
+            font-size: 9px;
+            color: var(--cyan);
+        }
+
+        .dist-bar-wrap {
+            background: rgba(6, 15, 36, .8);
+            border: 1px solid var(--gb);
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+
+        .dist-track {
+            height: 7px;
+            background: var(--white-faint);
+            border-radius: 99px;
+            overflow: hidden;
+            margin: 8px 0 5px;
+            position: relative
+        }
+
+        .dist-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width .3s, background .3s
+        }
+
+        .dist-zones {
+            display: flex;
+            justify-content: space-between;
+            font-size: 9px;
+            color: var(--white-dim);
+            font-family: 'Space Mono', monospace
+        }
+
+        .dist-pointer {
+            position: absolute;
+            top: -3px;
+            width: 2px;
+            height: 13px;
+            background: rgba(255, 255, 255, .6);
+            border-radius: 1px;
+            transition: left .3s
+        }
+
+        .checklist {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            width: 100%;
+            margin-bottom: 14px
+        }
+
+        .chk {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 14px;
+            background: rgba(6, 15, 36, .7);
+            border: 1px solid var(--white-faint);
+            border-radius: 9px;
+            font-size: 13px;
+            transition: all .3s
+        }
+
+        .chk.pass {
+            border-color: rgba(0, 230, 118, .3);
+            background: rgba(0, 230, 118, .04)
+        }
+
+        .chk.fail {
+            border-color: rgba(255, 71, 87, .3);
+            background: rgba(255, 71, 87, .04)
+        }
+
+        .chk.warn {
+            border-color: rgba(255, 184, 48, .3);
+            background: rgba(255, 184, 48, .04)
+        }
+
+        .chk-icon {
+            font-size: 14px;
+            width: 18px;
+            text-align: center;
+            flex-shrink: 0
+        }
+
+        .chk-text {
+            flex: 1;
+            font-size: 12px
+        }
+
+        .chk-val {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            color: var(--white-dim);
+            flex-shrink: 0
+        }
+
+        /* ══ RULER CALIBRATION ═══════════════════════════════════════
+           Full-screen, minimalist, no header/footer chrome.
+           Golden-ratio type scale (φ≈1.618) from a 12px base:
+             12 · 19 · 31 · 51 · 82 · 133 · 215
+           UI text uses tiers 0/1/2 (12/19/31); the hero numeral jumps
+           deliberately to tiers 5→6 (133→215, fluid) for scale contrast
+           rather than climbing the ladder one rung at a time.
+        ══════════════════════════════════════════════════════════ */
+        #screen-calib {
+            --gr-0: 12px;   /* micro — px readout, fine print          */
+            --gr-1: 19px;   /* caption — eyebrow, skip link            */
+            --gr-2: 31px;   /* heading — "Grab a ruler."                */
+            --gr-hero: clamp(133px, 17vw, 215px);
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 32px 24px;
+            padding-top: calc(32px + var(--safe-top));
+            position: relative;
+            overflow: hidden;
+        }
+
+        #calib-eyebrow {
+            font-family: 'Space Mono', monospace;
+            font-size: var(--gr-1);
+            font-weight: 700;
+            letter-spacing: .28em;
+            color: var(--brand);
+            text-transform: uppercase;
+        }
+
+        #calib-heading {
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 600;
+            font-size: var(--gr-2);
+            color: var(--text-1);
+            letter-spacing: -.01em;
+            margin-top: 14px;
+        }
+
+        #calib-body {
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 400;
+            font-size: 16px;
+            line-height: 1.6;
+            color: var(--text-2);
+            max-width: 380px;
+            margin: 10px auto 0;
+        }
+
+        .calib-hero-wrap {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            gap: 10px;
+            margin: clamp(28px, 5vw, 48px) 0 22px;
+        }
+
+        #calib-hero-num {
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            font-size: var(--gr-hero);
+            line-height: 1;
+            color: var(--text-1);
+            letter-spacing: -.02em;
+        }
+
+        #calib-hero-unit {
+            font-family: 'DM Sans', sans-serif;
+            font-weight: 600;
+            font-size: var(--gr-2);
+            color: var(--brand);
+        }
+
+        /* The ruler bar — fixed zero edge on the left, grows to the right.
+           20 even minor divisions (repeating-linear-gradient, honest —
+           doesn't claim mm accuracy, just shows equal fifths of the whole
+           bar, exactly like the tick pattern printed on a real 2cm span). */
+        .calib-ruler-wrap {
+            width: 100%;
+            max-width: 340px;
+            margin: 0 auto;
+        }
+
+        .calib-ruler-track {
+            position: relative;
+            height: 64px;
+            display: flex;
+            align-items: flex-end;
+        }
+
+        #calib-bar {
+            position: relative;
+            height: 100%;
+            min-width: 40px;
+            border: 1.5px solid var(--brand);
+            border-bottom: 3px solid var(--brand);
+            border-radius: 6px 10px 10px 6px;
+            box-shadow: 0 6px 18px -8px rgba(26, 86, 219, .35);
+            transition: box-shadow .2s;
+            background:
+                repeating-linear-gradient(to right,
+                    var(--border-color) 0, var(--border-color) 1px,
+                    transparent 1px, transparent 5%),
+                linear-gradient(180deg, #FFFFFF, var(--surface-2));
+        }
+
+        #screen-calib.is-dragging #calib-bar {
+            box-shadow: 0 10px 26px -8px rgba(26, 86, 219, .5);
+        }
+
+        #calib-hero-num {
+            transition: transform .2s cubic-bezier(.16,1,.3,1);
+        }
+        #screen-calib.is-dragging #calib-hero-num {
+            transform: scale(1.06);
+        }
+
+        #calib-bar::before,
+        #calib-bar::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            width: 2px;
+            height: 100%;
+            background: var(--brand);
+            border-radius: 1px;
+        }
+        #calib-bar::before { left: 0; }
+        #calib-bar::after { right: 0; }
+
+        #calib-bar .maj {
+            position: absolute;
+            bottom: 0;
+            width: 1.5px;
+            height: 55%;
+            background: var(--text-3);
+            border-radius: 1px;
+        }
+
+        #calib-zero-label {
+            position: absolute;
+            left: 0;
+            bottom: -22px;
+            font-family: 'Space Mono', monospace;
+            font-size: var(--gr-0);
+            color: var(--text-3);
+        }
+
+        #calib-px-readout {
+            margin-top: 30px;
+            font-family: 'Space Mono', monospace;
+            font-size: var(--gr-0);
+            letter-spacing: .06em;
+            color: var(--text-3);
+        }
+
+        .calib-slider-wrap {
+            width: 100%;
+            max-width: 340px;
+            margin: 22px auto 0;
+        }
+
+        #calib-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 4px;
+            border-radius: 99px;
+            background: var(--border-color);
+            outline: none;
+            cursor: pointer;
+        }
+
+        #calib-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--surface);
+            border: 3px solid var(--brand);
+            box-shadow: var(--shadow-md);
+            cursor: grab;
+            transition: transform .15s;
+        }
+        #calib-slider::-webkit-slider-thumb:active {
+            cursor: grabbing;
+            transform: scale(1.12);
+        }
+        #calib-slider::-moz-range-thumb {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--surface);
+            border: 3px solid var(--brand);
+            box-shadow: var(--shadow-md);
+            cursor: grab;
+        }
+        #calib-slider:focus-visible::-webkit-slider-thumb {
+            outline: 2px solid var(--brand);
+            outline-offset: 3px;
+        }
+
+        .calib-actions {
+            margin-top: clamp(28px, 5vw, 40px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+        }
+
+        #calib-skip-link {
+            font-family: 'DM Sans', sans-serif;
+            font-size: var(--gr-1);
+            color: var(--text-3);
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            transition: color .2s;
+        }
+        #calib-skip-link:hover { color: var(--text-2); }
+        #calib-skip-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 4px; }
+
+        #calib-confirm-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+
+        /* Ambient page-load stagger */
+        #screen-calib .calib-reveal {
+            opacity: 0;
+            transform: translateY(10px);
+            animation: calibIn .6s cubic-bezier(.16,1,.3,1) forwards;
+        }
+        #screen-calib .calib-reveal:nth-child(1) { animation-delay: .05s; }
+        #screen-calib .calib-reveal:nth-child(2) { animation-delay: .12s; }
+        #screen-calib .calib-reveal:nth-child(3) { animation-delay: .19s; }
+        #screen-calib .calib-reveal:nth-child(4) { animation-delay: .26s; }
+        #screen-calib .calib-reveal:nth-child(5) { animation-delay: .33s; }
+        @keyframes calibIn { to { opacity: 1; transform: none; } }
+
+        @media (prefers-reduced-motion: reduce) {
+            #screen-calib .calib-reveal { animation: none; opacity: 1; transform: none; }
+            #calib-bar { transition: none; }
+        }
+
+        @media (max-width: 420px) {
+            #calib-body { font-size: 15px; }
+            .calib-ruler-wrap, .calib-slider-wrap { max-width: 280px; }
+        }
+
+
+
+        /* ══ SNELLEN TEST ═══════════════════════════════════════════ */
+        .test-header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            padding-top: 4px;
+        }
+
+        .test-meta .test-name {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            color: var(--cyan);
+            letter-spacing: .1em;
+            margin-bottom: 2px
+        }
+
+        .test-meta .test-lvl {
+            font-size: 13px;
+            color: var(--white-dim)
+        }
+
+        .snellen-stats {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            margin-bottom: 14px;
+            flex-wrap: wrap
+        }
+
+        .sstat {
+            flex: 1;
+            min-width: 80px;
+            background: rgba(6, 15, 36, .8);
+            border: 1px solid var(--gb);
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center
+        }
+
+        .sstat-l {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--white-dim);
+            margin-bottom: 3px
+        }
+
+        .sstat-v {
+            font-family: 'Space Mono', monospace;
+            font-size: 16px;
+            color: var(--cyan)
+        }
+
+        .opto-stage {
+            width: 100%;
+            border-radius: 12px;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 14px;
+            position: relative;
+            overflow: hidden;
+            flex-direction: column;
+            padding: 20px;
+            min-height: 120px;
+        }
+
+        .opto-letter {
+            font-family: 'Space Mono', monospace;
+            color: #111;
+            font-weight: 700;
+            user-select: none;
+            letter-spacing: -.04em;
+            transition: font-size .35s ease;
+        }
+
+        .opto-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap
+        }
+
+        .choice-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 9px;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+
+        .choice-btn {
+            background: rgba(6, 15, 36, .85);
+            border: 1px solid var(--gb);
+            border-radius: 9px;
+            padding: 14px 6px;
+            font-family: 'Space Mono', monospace;
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--white);
+            cursor: pointer;
+            transition: all .18s;
+            text-align: center;
+        }
+
+        .choice-btn:hover {
+            border-color: var(--blue);
+            background: rgba(10, 110, 245, .1);
+            transform: translateY(-1px)
+        }
+
+        .choice-btn.correct {
+            border-color: var(--green) !important;
+            background: rgba(0, 230, 118, .12) !important;
+            color: var(--green) !important
+        }
+
+        .choice-btn.wrong {
+            border-color: var(--red) !important;
+            background: rgba(255, 71, 87, .12) !important;
+            color: var(--red) !important
+        }
+
+        .choice-btn:disabled {
+            pointer-events: none
+        }
+
+        .eye-cover-reminder {
+            background: rgba(0, 212, 255, .06);
+            border: 1px solid rgba(0, 212, 255, .2);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 11px;
+            color: var(--cyan);
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .test-question {
+            font-size: 13px;
+            color: var(--white-dim);
+            text-align: center;
+            margin-bottom: 14px;
+            line-height: 1.6
+        }
+
+        /* ══ INSTRUCTION BOX ════════════════════════════════════════ */
+        .instr {
+            background: rgba(10, 110, 245, .05);
+            border: 1px solid rgba(10, 110, 245, .18);
+            border-radius: 10px;
+            padding: 12px 16px;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            width: 100%;
+        }
+
+        .instr-icon {
+            font-size: 16px;
+            flex-shrink: 0;
+            margin-top: 1px
+        }
+
+        .instr-text {
+            font-size: 12px;
+            color: var(--white-dim);
+            line-height: 1.6
+        }
+
+        .instr-text strong {
+            color: var(--white)
+        }
+
+        /* ══ RESULTS ════════════════════════════════════════════════ */
+        /* ENG-05: Results screen must always scroll — never clip on short viewports */
+        #screen-results {
+            justify-content: flex-start;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .results-title {
+            font-family: 'Instrument Serif', serif;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
+        .scorecard {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            width: 100%;
+            margin-bottom: 14px
+        }
+
+        .score-tile {
+            padding: 16px;
+        }
+
+        .stile-label {
+            margin-bottom: 10px;
+        }
+
+        .stile-gauge {
+            text-align: center;
+            margin-bottom: 6px
+        }
+
+        .stile-value {
+            font-family: 'Space Mono', monospace;
+            font-size: 20px;
+            margin-bottom: 2px;
+        }
+
+        .stile-sub {
+            font-size: 11px;
+        }
+
+        .power-section {
+            padding: 20px;
+            width: 100%;
+            margin-bottom: 12px;
+        }
+
+        .power-section-title {
+            font-family: 'Space Mono', monospace;
+            margin-bottom: 14px;
+        }
+
+        .power-eyes-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px
+        }
+
+        .power-eye {
+            flex: 1;
+            background: rgba(10, 110, 245, .06);
+            border: 1px solid rgba(10, 110, 245, .2);
+            border-radius: 10px;
+            padding: 14px;
+        }
+
+        .pe-label {
+            font-weight: 700;
+            letter-spacing: .06em;
+            margin-bottom: 5px;
+        }
+
+        .pe-power {
+            font-family: 'Space Mono', monospace;
+            font-size: 18px;
+            margin-bottom: 3px;
+        }
+
+        .pe-snellen {
+            font-size: 11px;
+        }
+
+        .pe-note {
+            font-size: 11px;
+            color: var(--white-dim);
+            line-height: 1.6;
+            border-top: 1px solid var(--white-faint);
+            padding-top: 12px;
+            margin-top: 2px
+        }
+
+        .rec-list {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+            width: 100%;
+            margin-bottom: 14px
+        }
+
+        .rec {
+            display: flex;
+            gap: 11px;
+            align-items: flex-start;
+            padding: 13px;
+        }
+
+        .rec-ico {
+            font-size: 16px;
+            flex-shrink: 0;
+            margin-top: 2px
+        }
+
+        .rec-body {
+            font-size: 12px;
+            line-height: 1.65;
+        }
+
+        .rec-body strong {
+            color: var(--white)
+        }
+
+        .disclaimer-box {
+            padding: 14px 16px;
+            width: 100%;
+            margin-bottom: 16px;
+        }
+
+        .action-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 24px;
+            width: 100%
+        }
+
+        /* ══ UTILS ══════════════════════════════════════════════════ */
+        .label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            color: var(--white-dim);
+            margin-bottom: 5px
+        }
+
+        .serif {
+            font-family: 'Instrument Serif', serif
+        }
+
+        .mono {
+            font-family: 'Space Mono', monospace
+        }
+
+        .text-cyan {
+            color: var(--cyan)
+        }
+
+        .text-dim {
+            color: var(--white-dim)
+        }
+
+        .text-green {
+            color: var(--green)
+        }
+
+        .text-amber {
+            color: var(--amber)
+        }
+
+        .text-red {
+            color: var(--red)
+        }
+
+        .mb-2 {
+            margin-bottom: 8px
+        }
+
+        .mb-3 {
+            margin-bottom: 12px
+        }
+
+        .mb-4 {
+            margin-bottom: 16px
+        }
+
+        .mt-3 {
+            margin-top: 12px
+        }
+
+        .mt-4 {
+            margin-top: 16px
+        }
+
+        .w-full {
+            width: 100%
+        }
+
+        .text-center {
+            text-align: center
+        }
+
+        .flex-center {
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .flex-between {
+            display: flex;
+            align-items: center;
+            justify-content: space-between
+        }
+
+        h2 {
+            font-family: 'Instrument Serif', serif;
+            font-size: 24px;
+            font-weight: 400
+        }
+
+        h3 {
+            font-size: 15px;
+            font-weight: 600
+        }
+
+        /* ══ NEAR VISION (reading test) ════════════════════════════ */
+        .near-text-box {
+            background: #fff;
+            border-radius: 12px;
+            padding: 22px 24px;
+            width: 100%;
+            color: #111;
+            line-height: 1.8;
+            margin-bottom: 14px;
+        }
+
+        .near-row {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 8px;
+            margin-bottom: 8px
+        }
+
+        .near-size-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            color: #888;
+            width: 36px;
+            flex-shrink: 0
+        }
+
+        /* ══ MOBILE ════════════════════════════════════════════════ */
+        @media(max-width:480px) {
+
+            .scorecard {
+                grid-template-columns: 1fr
+            }
+
+            .power-eyes-row {
+                flex-direction: column
+            }
+
+            .choice-grid {
+                grid-template-columns: repeat(3, 1fr)
+            }
+
+            .card {
+                padding: 16px
+            }
+
+            .btn-lg {
+                padding: 13px 22px;
+                font-size: 15px
+            }
+        }
+
+        /* ══ PRINT ═════════════════════════════════════════════════ */
+        @media print {
+
+            #bg-canvas,
+            #top-nav,
+            #pip,
+            #prog-wrap,
+            #toast,
+            #loading {
+                display: none !important
+            }
+
+            .screen:not(#screen-results) {
+                display: none !important
+            }
+
+            #screen-results {
+                position: static !important;
+                opacity: 1 !important;
+                pointer-events: all !important;
+                overflow: visible !important;
+                padding-top: 0 !important
+            }
+
+            body {
+                background: #fff !important;
+                color: #000 !important;
+                overflow: auto !important
+            }
+
+            .score-tile,
+            .power-section,
+            .rec {
+                background: #f5f5f5 !important;
+                border-color: #ccc !important
+            }
+
+            .stile-value,
+            .pe-power {
+                color: #000 !important
+            }
+        }
+
+        /* ══ FADE ANIMATION ════════════════════════════════════════ */
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(18px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        .fu {
+            animation: fadeUp .45s ease forwards
+        }
+
+        .d1 {
+            animation-delay: .08s;
+            opacity: 0
+        }
+
+        .d2 {
+            animation-delay: .16s;
+            opacity: 0
+        }
+
+        .d3 {
+            animation-delay: .24s;
+            opacity: 0
+        }
+
+        .d4 {
+            animation-delay: .32s;
+            opacity: 0
+        }
+
+        .d5 {
+            animation-delay: .4s;
+            opacity: 0
+        }
+
+        /* ══ OHI GAUGE ══════════════════════════════════════════════ */
+        .ohi-wrap {
+            width: 100%;
+            backdrop-filter: blur(18px);
+            padding: 22px 24px;
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .ohi-title {
+            font-family: 'Space Mono', monospace;
+            margin-bottom: 4px;
+        }
+
+        .ohi-sub {
+            font-size: 11px;
+            color: var(--white-dim);
+            margin-top: 6px;
+            text-align: center
+        }
+
+        .ohi-breakdown {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 12px;
+            width: 100%;
+        }
+
+        .ohi-bp {
+            background: rgba(255, 255, 255, .04);
+            border: 1px solid var(--white-faint);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 11px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            min-width: 80px
+        }
+
+        .ohi-bp-val {
+            font-family: 'Space Mono', monospace;
+            font-size: 13px;
+            font-weight: 700
+        }
+
+        .ohi-bp-lbl {
+            font-size: 9px;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+        }
+
+        /* ══ NEAR VISION ══════════════════════════════════════════════ */
+        .near-stage {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin: 12px 0;
+            background: rgba(255, 255, 255, .97);
+            border-radius: 12px;
+            border: 1px solid var(--gb);
+            min-height: 180px
+        }
+
+        #near-canvas {
+            display: block
+        }
+
+        .near-gap-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            width: 100%;
+            max-width: 340px;
+            margin: 10px 0 16px
+        }
+
+        .near-gap-btn {
+            background: rgba(6, 15, 36, .85);
+            border: 1px solid var(--gb);
+            border-radius: 10px;
+            color: var(--white);
+            font-size: 22px;
+            padding: 18px 0;
+            cursor: pointer;
+            transition: all .2s;
+            text-align: center
+        }
+
+        .near-gap-btn:hover {
+            border-color: var(--cyan);
+            background: rgba(0, 212, 255, .08);
+            transform: translateY(-2px)
+        }
+
+        .near-dist-warn {
+            background: rgba(255, 71, 87, .1);
+            border: 1px solid rgba(255, 71, 87, .3);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 12px;
+            color: var(--red);
+            text-align: center;
+            width: 100%;
+            margin-bottom: 8px;
+            display: none
+        }
+
+        /* ══ RESEARCH MODE ══════════════════════════════════════════ */
+        .research-badge {
+            position: fixed;
+            bottom: 18px;
+            left: 18px;
+            background: linear-gradient(135deg, rgba(0, 212, 255, .15), rgba(120, 80, 255, .15));
+            border: 1px solid rgba(0, 212, 255, .4);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            color: var(--cyan);
+            letter-spacing: .08em;
+            z-index: 999;
+            display: none;
+            cursor: pointer;
+            backdrop-filter: blur(10px)
+        }
+
+        .research-badge::before {
+            content: '⚗ ';
+            font-size: 11px
+        }
+
+        .research-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .85);
+            backdrop-filter: blur(16px);
+            z-index: 9000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px
+        }
+
+        .research-inner {
+            background: var(--surface);
+            border: 1px solid rgba(0, 212, 255, .3);
+            border-radius: 16px;
+            padding: 24px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 80vh;
+            overflow-y: auto
+        }
+
+        .research-inner h3 {
+            font-family: 'Space Mono', monospace;
+            font-size: 13px;
+            color: var(--cyan);
+            margin-bottom: 4px;
+            letter-spacing: .1em
+        }
+
+        .research-inner p {
+            font-size: 12px;
+            color: var(--white-dim);
+            margin-bottom: 16px
+        }
+
+        .research-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            font-family: 'Space Mono', monospace;
+            margin-bottom: 16px
+        }
+
+        .research-table th {
+            background: rgba(0, 212, 255, .08);
+            color: var(--cyan);
+            padding: 6px 8px;
+            text-align: left;
+            font-size: 9px;
+            letter-spacing: .08em;
+            border-bottom: 1px solid rgba(0, 212, 255, .2)
+        }
+
+        .research-table td {
+            padding: 5px 8px;
+            color: rgba(220, 235, 255, .8);
+            border-bottom: 1px solid rgba(255, 255, 255, .04)
+        }
+
+        .research-table tr:hover td {
+            background: rgba(0, 212, 255, .04)
+        }
+
+        /* ══ ENV GUARD ══════════════════════════════════════════════ */
+        .env-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .88);
+            backdrop-filter: blur(18px);
+            z-index: 8000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px
+        }
+
+        .env-inner {
+            padding: 26px 22px;
+            width: 100%;
+            max-width: 380px;
+        }
+
+        .env-inner h3 {
+            font-family: 'Space Mono', monospace;
+            font-size: 12px;
+            color: var(--amber);
+            letter-spacing: .1em;
+            margin-bottom: 6px
+        }
+
+        .env-inner p {
+            font-size: 12px;
+            color: var(--white-dim);
+            margin-bottom: 18px
+        }
+
+        .env-checks {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px
+        }
+
+        .env-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255, 255, 255, .04);
+            border-radius: 10px;
+            padding: 10px 14px
+        }
+
+        .env-icon {
+            font-size: 18px;
+            width: 24px;
+            text-align: center
+        }
+
+        .env-info {
+            flex: 1
+        }
+
+        .env-label {
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .env-val {
+            font-size: 11px;
+            margin-top: 1px;
+        }
+
+        .env-status {
+            font-size: 18px;
+            min-width: 20px;
+            text-align: right
+        }
+
+        .env-btns {
+            display: flex;
+            gap: 10px
+        }
+
+        /* ══ CONSENT ════════════════════════════════════════════════ */
+        .consent-screen {
+            position: fixed;
+            inset: 0;
+            background: #040c20;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px
+        }
+
+        .consent-inner {
+            width: 100%;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px
+        }
+
+        .consent-logo {
+            font-family: 'Instrument Serif', serif;
+            font-size: 26px;
+            color: var(--cyan);
+            letter-spacing: .04em
+        }
+
+        .consent-logo span {
+            color: rgba(255, 255, 255, .4);
+            font-size: 13px;
+            font-family: 'Space Mono', monospace;
+            display: block;
+            margin-top: 2px;
+            letter-spacing: .12em
+        }
+
+        .consent-card {
+            background: var(--glass);
+            backdrop-filter: blur(18px);
+            border: 1px solid var(--gb);
+            border-radius: 14px;
+            padding: 20px
+        }
+
+        .consent-card h3 {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            color: var(--amber);
+            letter-spacing: .1em;
+            margin-bottom: 10px
+        }
+
+        .consent-points {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 0
+        }
+
+        .consent-points li {
+            font-size: 12px;
+            color: rgba(200, 215, 240, .85);
+            display: flex;
+            gap: 10px;
+            line-height: 1.5
+        }
+
+        .consent-points li::before {
+            content: attr(data-icon);
+            font-size: 14px;
+            flex-shrink: 0;
+            width: 20px
+        }
+
+        .consent-checks {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 4px
+        }
+
+        .consent-check {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            cursor: pointer
+        }
+
+        .consent-check input {
+            accent-color: var(--cyan);
+            width: 16px;
+            height: 16px;
+            margin-top: 2px;
+            flex-shrink: 0;
+            cursor: pointer
+        }
+
+        .consent-check label {
+            font-size: 12px;
+            color: rgba(200, 215, 240, .8);
+            cursor: pointer;
+            line-height: 1.5
+        }
+
+        #consent-proceed {
+            width: 100%;
+            opacity: 1;
+            pointer-events: all;
+            transition: opacity .3s;
+            cursor: pointer;
+        }
+
+        #consent-proceed:disabled {
+            opacity: .5;
+            pointer-events: none;
+            cursor: not-allowed;
+        }
+
+        #consent-proceed.ready {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        /* Delete data btn in settings/results */
+        .delete-data-btn {
+            font-family: 'Space Mono', monospace;
+            letter-spacing: .06em;
+        }
+
+        .delete-data-btn:hover {
+            border-color: var(--red);
+        }
+
+        /* ══ PWA INSTALL ════════════════════════════════════════════ */
+        .install-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 14px 20px;
+            display: none;
+            align-items: center;
+            gap: 14px;
+            z-index: 7000;
+            backdrop-filter: blur(12px);
+        }
+
+        .install-bar-text {
+            flex: 1
+        }
+
+        .install-bar-title {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .install-bar-sub {
+            font-size: 11px;
+            margin-top: 1px;
+        }
+
+        .install-bar-btns {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0
+        }
+        /* ══ GESTURE ALERT SYSTEM ══════════════════════════════════════ */
+#gesture-alert {
+            position: fixed;
+            bottom: 88px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            z-index: 9100;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 20px;
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            max-width: 340px;
+            width: calc(100vw - 40px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+        }
+#gesture-alert.ga-show {
+    opacity: 1;
+    pointer-events: none; /* FIX: toast must never swallow taps meant for the answer buttons */
+    transform: translateX(-50%) translateY(0);
+}
+#gesture-alert.ga-show .ga-dismiss { pointer-events: auto; } /* ...only the ✕ stays clickable */
+#gesture-alert.ga-warn {
+    border-color: rgba(255, 184, 48, 0.5);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.55), 0 0 24px rgba(255,184,48,0.12);
+}
+#gesture-alert.ga-error {
+    border-color: rgba(255, 71, 87, 0.5);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.55), 0 0 24px rgba(255,71,87,0.15);
+}
+#gesture-alert.ga-success {
+    border-color: rgba(0, 230, 120, 0.5);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.55), 0 0 24px rgba(0,230,120,0.12);
+}
+.ga-icon-wrap {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: rgba(0,212,255,0.08);
+    border: 1px solid rgba(0,212,255,0.15);
+    position: relative;
+    overflow: hidden;
+}
+.ga-warn .ga-icon-wrap  { background: rgba(255,184,48,0.08);  border-color: rgba(255,184,48,0.2); }
+.ga-error .ga-icon-wrap { background: rgba(255,71,87,0.08);   border-color: rgba(255,71,87,0.2); }
+.ga-success .ga-icon-wrap{ background: rgba(0,230,120,0.08);  border-color: rgba(0,230,120,0.2); }
+.ga-emoji {
+    font-size: 26px;
+    line-height: 1;
+    animation: ga-pulse 1.8s ease-in-out infinite;
+}
+@keyframes ga-pulse {
+    0%,100% { transform: scale(1); }
+    50%      { transform: scale(1.12); }
+}
+.ga-error .ga-emoji { animation: ga-shake 0.5s ease infinite; }
+@keyframes ga-shake {
+    0%,100% { transform: translateX(0); }
+    25%      { transform: translateX(-3px); }
+    75%      { transform: translateX(3px); }
+}
+.ga-success .ga-emoji { animation: ga-pop 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+@keyframes ga-pop {
+    from { transform: scale(0.6); opacity:0; }
+    to   { transform: scale(1);   opacity:1; }
+}
+.ga-body { flex: 1; min-width: 0; }
+.ga-title {
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+.ga-warn  .ga-title  { color: var(--amber); }
+.ga-error .ga-title  { color: var(--red);   }
+.ga-success .ga-title{ color: var(--green); }
+.ga-msg {
+            font-size: 13px;
+            line-height: 1.45;
+            font-weight: 400;
+        }
+.ga-sub {
+    font-size: 10.5px;
+    color: rgba(140,160,200,0.75);
+    margin-top: 3px;
+    font-style: italic;
+}
+.ga-dismiss {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(180,200,230,0.6);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    align-self: flex-start;
+}
+.ga-dismiss:hover { background: rgba(255,255,255,0.12); color: white; }
+
+/* Progress bar for timed alerts */
+.ga-progress {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 3px;
+    border-radius: 0 0 18px 18px;
+    background: rgba(0,212,255,0.5);
+    width: 100%;
+    transform-origin: left;
+    transition: transform linear;
+}
+.ga-warn  .ga-progress { background: rgba(255,184,48,0.5); }
+.ga-error .ga-progress { background: rgba(255,71,87,0.5); }
+.ga-success .ga-progress{ background: rgba(0,230,120,0.5); }
+
+        /* ══ EYE COVER REMINDER (formerly "Protocol Violation") ═══════ */
+        .pv-overlay {
+            position: fixed;
+            inset: 0;
+            backdrop-filter: blur(4px);
+            z-index: 6000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        .pv-box {
+            padding: 24px 32px;
+            text-align: center;
+            pointer-events: none;
+            max-width: 320px;
+        }
+
+        .pv-title {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: .02em;
+            margin-bottom: 8px;
+        }
+
+        .pv-sub {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .pv-blink {
+            font-size: 12px;
+            color: rgba(0, 212, 255, .6);
+            margin-top: 10px;
+            font-family: 'Space Mono', monospace
+        }
+
+        @keyframes pv-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 184, 48, .25) }
+            50%       { box-shadow: 0 0 0 10px rgba(255, 184, 48, 0) }
+        }
+
+        .pv-box {
+            animation: pv-pulse 2s infinite;
+        }
+
+        /* ══ DIOPTER ENGINE ═════════════════════════════════════════ */
+        .diop-stage {
+            width: 100%;
+            background: #f8f8f8;
+            border-radius: 14px;
+            border: 2px solid var(--gb);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 160px;
+            margin: 10px 0;
+            position: relative;
+            overflow: hidden
+        }
+
+        .diop-dist-bar {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, .06);
+            border-radius: 99px;
+            overflow: hidden;
+            margin: 6px 0 2px
+        }
+
+        .diop-dist-fill {
+            height: 100%;
+            border-radius: 99px;
+            background: linear-gradient(90deg, var(--red), var(--amber), var(--green));
+            transition: width .2s
+        }
+
+        .diop-dist-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            color: var(--cyan);
+            text-align: center;
+            margin-bottom: 8px
+        }
+
+        .diop-phase {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            letter-spacing: .1em;
+            color: var(--amber);
+            margin-bottom: 6px;
+            text-align: center
+        }
+
+        .diop-result-box {
+            background: var(--glass);
+            border: 1px solid var(--gb);
+            border-radius: 14px;
+            padding: 20px;
+            text-align: center;
+            margin: 10px 0
+        }
+
+        .diop-power {
+            font-family: 'Instrument Serif', serif;
+            font-size: 52px;
+            color: var(--cyan);
+            line-height: 1
+        }
+
+        .diop-power-label {
+            font-size: 11px;
+            color: var(--white-dim);
+            margin-top: 4px;
+            font-family: 'Space Mono', monospace
+        }
+
+        .diop-category {
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 8px
+        }
+
+
+        /* ── GESTURE SWIPE RING (shows briefly on swipe) ──────────────── */
+        @keyframes swipe-fade {
+            0%   { opacity: 1; transform: translateY(0);   }
+            100% { opacity: 0; transform: translateY(-16px); }
+        }
+        .swipe-indicator {
+            position: fixed;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,212,255,.12);
+            border: 1px solid rgba(0,212,255,.3);
+            border-radius: 99px;
+            padding: 7px 18px;
+            font-family: 'Space Mono', monospace;
+            font-size: 11px;
+            color: var(--cyan);
+            pointer-events: none;
+            z-index: 9998;
+            animation: swipe-fade .9s ease forwards;
+        }
+
+        /* ══ GLOBAL MOBILE & TABLET RESPONSIVENESS ═══════════════════ */
+        @media (max-width: 480px) {
+            body { font-size: 15px; }
+            .screen { padding: 0 12px 20px; }
+            .screen-inner { padding-bottom: 80px; }
+            .card { padding: 16px; }
+            .btn { padding: 12px 18px; font-size: 14px; }
+            .btn-lg { padding: 14px 22px; font-size: 15px; }
+            /* Ensure nothing overflows horizontally */
+            img, video, canvas, table { max-width: 100%; }
+            /* Test options wrap */
+            .choice-btn { font-size: 16px; padding: 12px 10px; }
+            #choice-grid { gap: 8px; }
+            /* Consent screen */
+            .consent-inner { padding: 20px 16px; }
+            /* Research table */
+            .research-inner { padding: 20px 14px; overflow-x: auto; }
+            .research-table { font-size: 11px; }
+            /* ENV modal */
+            .env-inner { padding: 20px 14px; }
+            /* PIP smaller on mobile */
+            #pip-box { width: 100px; height: 70px; }
+            #pip-dist-bar { width: 100px; }
+            #pip { bottom: 70px; right: 10px; }
+        }
+        @media (max-width: 768px) {
+            /* Prevent overflow on all screens */
+            .screen-inner { max-width: 100%; }
+            /* Consent */
+            .consent-screen { padding: 12px; }
+            .consent-inner { padding: 24px 16px; border-radius: 16px; }
+            /* Reticle */
+            .reticle { width: 180px; height: 180px; }
+            .rr:nth-child(1) { width: 180px; height: 180px; }
+            .rr:nth-child(2) { width: 144px; height: 144px; }
+            .rr:nth-child(3) { width: 110px; height: 110px; }
+            .rr:nth-child(4) { width: 78px; height: 78px; }
+            .rr:nth-child(5) { width: 45px; height: 45px; }
+            /* Fix top-nav overflow */
+            #top-nav { padding: 0 12px; gap: 8px; }
+            .nav-logo { font-size: 17px; }
+            /* Gesture alert on mobile */
+            #gesture-alert { width: calc(100vw - 24px); left: 50%; right: auto; top: 82px; bottom: auto; } /* FIX: base rule has bottom:88px → with top set the toast stretched to ~530px tall and was half off-screen (translateX(-50%) with left:12px) */
+            /* Protocol violation overlay text */
+            .pv-sub { font-size: 13px; }
+        }
+        /* Fix body overflow on mobile for non-splash screens */
+        @media (max-width: 768px) {
+            body { overflow: hidden; }
+            .screen { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        }
+
+/* ═══════════════════════════════════════════════════════════════════
+   DESIGN REBRAND — DESIGN-01 through 06
+   Clean Medical White Theme · Professional · Trustworthy
+   Applied last — cascades over dark defaults.
+   Test screens (#screen-snellen, etc.) intentionally stay dark.
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── DESIGN-01: New semantic design tokens ─────────────────────── */
+:root {
+    --brand:          #1A56DB;
+    --brand-hover:    #1347C0;
+    --brand-light:    #EBF2FF;
+    --brand-dim:      rgba(26,86,219,.12);
+    --teal-new:       #0D9E8A;
+    --teal-light:     #E6F7F5;
+    --surface:        #FFFFFF;
+    --surface-2:      #F8FAFB;
+    --surface-3:      #F1F5F9;
+    --border-color:   #E2E8F0;
+    --border-focus:   #1A56DB;
+    --text-1:         #0F172A;
+    --text-2:         #475569;
+    --text-3:         #94A3B8;
+    --success-new:    #059669;
+    --success-light:  #ECFDF5;
+    --warning-new:    #D97706;
+    --warning-light:  #FFFBEB;
+    --danger-new:     #DC2626;
+    --danger-light:   #FEF2F2;
+    --shadow-xs:      0 1px 2px rgba(0,0,0,.05);
+    --shadow-sm:      0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+    --shadow-md:      0 4px 12px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.05);
+    --shadow-lg:      0 12px 40px rgba(0,0,0,.10), 0 4px 16px rgba(0,0,0,.06);
+    --r-new:          14px;
+}
+
+/* ── DESIGN-01: Global body → light background ─────────────────── */
+body {
+    background: var(--surface-2);
+    color: var(--text-1);
+}
+
+/* Keep particle canvas but reduce opacity heavily on light bg */
+#bg-canvas { opacity: 0.18; }
+
+/* ── DESIGN-01: Top Nav — white, clean, professional ───────────── */
+#top-nav {
+    background: rgba(255,255,255,.97);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: var(--shadow-xs);
+}
+.nav-logo {
+    color: var(--text-1);
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+}
+.nav-logo-dot {
+    background: var(--brand);
+    box-shadow: 0 0 8px rgba(26,86,219,.4);
+}
+#nav-dist-pill {
+    background: var(--brand-dim);
+    border-color: rgba(26,86,219,.25);
+    color: var(--brand);
+}
+#nav-eye-pill {
+    background: var(--brand-dim);
+    color: var(--brand);
+}
+#tts-toggle {
+    background: var(--surface-3);
+    border-color: var(--border-color);
+    color: var(--text-2);
+}
+#tts-toggle:hover {
+    background: var(--brand-dim);
+    border-color: var(--brand);
+    color: var(--brand);
+}
+.nav-what-is { color: var(--text-2); }
+.nav-what-is:hover { color: var(--text-1); }
+.nav-contact-btn {
+    background: var(--brand);
+    color: #fff;
+    border: none;
+    box-shadow: 0 2px 8px rgba(26,86,219,.3);
+}
+.nav-contact-btn:hover {
+    background: var(--brand-hover);
+    transform: translateY(-1px);
+}
+
+
+
+
+.menu-title {
+    color: var(--text-1);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+}
+.menu-sub { color: var(--text-2); }
+
+/* ── DESIGN-04: Results screen ──────────────────────────────────── */
+#screen-results {
+    background: var(--surface-2);
+    color: var(--text-1);
+}
+.results-title {
+    color: var(--text-1);
+    font-size: 28px;
+    font-weight: 700;
+}
+.score-tile {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    border-radius: 14px;
+}
+.stile-label { color: var(--text-2); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.stile-value { color: var(--text-1); font-weight: 600; }
+.stile-sub   { color: var(--text-3); }
+
+.ohi-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+    border-radius: 18px;
+}
+.ohi-title {
+    color: var(--text-2);
+    font-size: 10px;
+    letter-spacing: .1em;
+}
+.ohi-breakdown { border-top: 1px solid var(--border-color); }
+.ohi-bp-lbl { color: var(--text-3); }
+
+.rec {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-xs);
+    border-radius: 12px;
+}
+.rec-body { color: var(--text-2); }
+
+.power-section {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-sm);
+    border-radius: 14px;
+}
+.power-section-title { color: var(--text-3); font-size: 10px; letter-spacing: .08em; }
+.pe-label  { color: var(--text-2); font-size: 12px; }
+.pe-power  { color: var(--brand); }
+.pe-snellen { color: var(--text-3); }
+
+.disclaimer-box {
+    background: var(--warning-light);
+    border: 1px solid rgba(217,119,6,.2);
+    border-radius: 12px;
+    color: #92400E;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+/* ── DESIGN-06: Global button system — one primary, clean ghost ── */
+.btn-primary, .btn.btn-primary {
+    background: var(--brand);
+    color: #fff;
+    border: none;
+    box-shadow: 0 2px 8px rgba(26,86,219,.28);
+    font-weight: 600;
+    border-radius: 10px;
+    transition: background .18s, transform .15s, box-shadow .18s;
+}
+.btn-primary:hover, .btn.btn-primary:hover {
+    background: var(--brand-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(26,86,219,.35);
+}
+.btn-primary:active, .btn.btn-primary:active { transform: translateY(0); }
+
+/* Remove the cyan variant — map it to brand blue */
+.btn-cyan, .btn.btn-cyan {
+    background: var(--brand);
+    color: #fff;
+    border: none;
+    box-shadow: 0 2px 8px rgba(26,86,219,.28);
+}
+.btn-cyan:hover, .btn.btn-cyan:hover {
+    background: var(--brand-hover);
+}
+
+.btn-ghost, .btn.btn-ghost {
+    background: var(--surface-3);
+    color: var(--text-2);
+    border: 1px solid var(--border-color);
+}
+.btn-ghost:hover, .btn.btn-ghost:hover {
+    background: var(--brand-dim);
+    border-color: var(--brand);
+    color: var(--brand);
+}
+.btn-outline, .btn.btn-outline {
+    background: transparent;
+    color: var(--text-2);
+    border: 1.5px solid var(--border-color);
+}
+.btn-outline:hover, .btn.btn-outline:hover {
+    border-color: var(--brand);
+    color: var(--brand);
+    background: var(--brand-dim);
+}
+.btn-danger, .btn.btn-danger {
+    background: var(--danger-new);
+    color: #fff;
+    border: none;
+}
+
+/* ── DESIGN-02: Typography hierarchy ────────────────────────────── */
+/* Remove Space Mono from non-data UI elements */
+.menu-sub, .menu-title, .feat-title, .feat-desc,
+.rec-body, .stile-sub, .stile-value, .pe-snellen {
+    font-family: 'DM Sans', sans-serif;
+    letter-spacing: normal;
+}
+/* Keep Space Mono only for actual data values */
+.pe-power, .ohi-title, #nav-dist-pill, .stile-label { font-family: 'Space Mono', monospace; }
+
+/* ── Setup / Pre-test screens — clean white cards ───────────────── */
+#screen-setup, #screen-calib, #screen-pretest {
+    background: var(--surface-2);
+    color: var(--text-1);
+}
+.glass-card, .setup-card, .calib-card {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+    border-radius: 16px;
+}
+.label, .form-label { color: var(--text-2); }
+
+/* Chip system — cleaner, less neon */
+.chip-blue   { background: var(--brand-dim); color: var(--brand); border: 1px solid rgba(26,86,219,.2); }
+.chip-cyan   { background: var(--brand-dim); color: var(--brand); border: 1px solid rgba(26,86,219,.2); }
+.chip-green  { background: var(--success-light); color: var(--success-new); border: 1px solid rgba(5,150,105,.2); }
+.chip-amber  { background: var(--warning-light); color: var(--warning-new); border: 1px solid rgba(217,119,6,.2); }
+.chip-red    { background: var(--danger-light); color: var(--danger-new); border: 1px solid rgba(220,38,38,.2); }
+
+/* ── TEST SCREENS stay dark (intentional — better visual accuracy) */
+#screen-snellen, #screen-near, #screen-diopter, #screen-contrast {
+    background: #080d1a;
+    color: #EEF3FF;
+}
+/* Test header within dark test screens */
+#screen-snellen .test-header,
+#screen-near .test-header, #screen-diopter .test-header {
+    background: rgba(255,255,255,.04);
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    border-radius: 12px;
+    padding: 12px 16px;
+}
+/* Test name/level labels */
+.test-name { color: rgba(255,255,255,.5); font-size: 11px; letter-spacing: .08em; }
+.test-lvl  { color: #EEF3FF; font-weight: 600; }
+
+/* ── DESIGN-05: Progress bar — brand coloured ─────── */
+#prog-fill {
+    background: var(--brand);
+}
+#prog-wrap {
+    background: var(--border-color);
+}
+
+/* ── Nav-bar stepper dots on test screens ──────────────────────── */
+#test-stepper {
+    background: rgba(8,13,26,.97);
+    border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+/* ── Loading screen ─────────────────────────────────────────────── */
+#screen-loading {
+    background: var(--surface-2);
+}
+#load-title  { color: var(--text-1); }
+#load-sub    { color: var(--text-2); }
+
+/* ── Consent screen — already clean white, just align brand colour */
+#consent-screen { background: #FAFBFC; }
+#consent-screen h1 { color: var(--text-1); }
+#consent-screen p  { color: var(--text-2); }
+
+/* ── Footer ─────────────────────────────────────────────────────── */
+#entry-footer {
+    background: #0F172A;
+    border-top: 1px solid rgba(255,255,255,.08);
+    box-shadow: 0 -4px 24px rgba(0,0,0,.18);
+}
+.footer-logo-text { color: #F8FAFC; }
+.footer-tagline   { color: rgba(255,255,255,.62); }
+.footer-link      { color: rgba(255,255,255,.6); }
+.footer-link:hover { color: #60A5FA; }
+.footer-sep       { color: rgba(255,255,255,.15); }
+
+/* ── PIP camera widget ──────────────────────────────────────────── */
+#pip {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-md);
+    border-radius: 14px;
+}
+.pip-label { color: var(--brand); }
+
+/* ── Toast notifications ────────────────────────────────────────── */
+#toast {
+    background: var(--text-1);
+    color: var(--surface);
+    border: none;
+    box-shadow: var(--shadow-lg);
+    border-radius: 10px;
+    font-size: 14px;
+}
+
+/* ── Gesture alert — neutral grey, not red ──────────────────────── */
+#gesture-alert {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    border-radius: 16px;
+    color: var(--text-1);
+}
+.ga-title { color: var(--text-1); font-family: 'DM Sans', sans-serif; font-size: 14px; letter-spacing: .01em; }
+.ga-msg   { color: var(--text-2); }
+
+/* ── Whitepaper modal ───────────────────────────────────────────── */
+#wp-modal { background: rgba(248,250,251,.98); backdrop-filter: blur(12px); }
+#wp-modal h1, #wp-modal div[style*="font-weight:700"] { color: var(--text-1); }
+#wp-modal div[style*="color:var(--white-dim)"] { color: var(--text-2); }
+
+/* ── Accuracy banner (low accuracy mode) ────────────────────────── */
+#accuracy-banner {
+    background: var(--warning-light);
+    border-top: 1px solid rgba(217,119,6,.3);
+    color: #92400E;
+}
+
+/* ── Delete data button ─────────────────────────────────────────── */
+.delete-data-btn {
+    background: var(--danger-light);
+    color: var(--danger-new);
+    border: 1px solid rgba(220,38,38,.2);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: background .2s;
+}
+.delete-data-btn:hover { background: #FEE2E2; }
+
+/* ── Calibration screen ─────────────────────────────────────────── */
+#screen-calib {
+    background: linear-gradient(var(--calib-angle, 135deg), var(--surface-2) 0%, var(--brand-light) 48%, var(--teal-light) 100%);
+    color: var(--text-1);
+}
+/* Full-screen instrument — no header, no footer chrome */
+body:has(#screen-calib.active) #top-nav { display: none !important; }
+.calib-card, .calib-stage { background: var(--surface); border: 1px solid var(--border-color); border-radius: 14px; }
+
+/* ── Nav logo dot matches brand ─────────────────────────────────── */
+.nav-logo-dot { background: var(--brand); box-shadow: 0 0 8px rgba(26,86,219,.45); }
+
+/* ── Pretest modal overlay ──────────────────────────────────────── */
+.pretest-overlay { background: rgba(15,23,42,.72); backdrop-filter: blur(8px); }
+.pretest-card  {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    border-radius: 20px;
+    color: var(--text-1);
+}
+.pretest-title { color: var(--text-1); }
+.pretest-point { color: var(--text-2); }
+
+/* ── Eye cover reminder (protocol violation) ────────────────────── */
+.pv-overlay { background: rgba(15,23,42,.6); }
+.pv-box {
+    background: var(--surface);
+    border: 1.5px solid rgba(217,119,6,.4);
+    box-shadow: var(--shadow-lg);
+    border-radius: 18px;
+}
+.pv-title { color: var(--warning-new); font-family: 'DM Sans', sans-serif; }
+.pv-sub   { color: var(--text-2); }
+
+/* ── ENV modal ──────────────────────────────────────────────────── */
+.env-inner {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    border-radius: 20px;
+    color: var(--text-1);
+}
+.env-label { color: var(--text-1); }
+.env-val   { color: var(--text-2); }
+
+/* ── Camera permission modal ────────────────────────────────────── */
+#cam-perm-modal > div {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    border-radius: 20px;
+    color: var(--text-1);
+}
+
+/* ── Methodology note in results ────────────────────────────────── */
+#methodology-note {
+    background: var(--surface-3);
+    border: 1px solid var(--border-color);
+    color: var(--text-3);
+    border-radius: 10px;
+}
+#methodology-note strong { color: var(--text-2); }
+
+/* ── Install bar ────────────────────────────────────────────────── */
+.install-bar {
+    background: var(--surface);
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -4px 16px rgba(0,0,0,.06);
+    color: var(--text-1);
+}
+.install-bar-title { color: var(--text-1); }
+.install-bar-sub   { color: var(--text-2); }
+
+/* ── Loading screen spinner ─────────────────────────────────────── */
+.scan-ring, .scan-inner { stroke: var(--brand); }
+
+/* ── Back guard modal ───────────────────────────────────────────── */
+#back-guard-modal > div {
+    background: var(--surface);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-lg);
+    border-radius: 20px;
+    color: var(--text-1);
+}
+
+/* ── Results verdict banner ─────────────────────────────────────── */
+#results-verdict {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    border-radius: 14px;
+}
+
+/* ── Responsive: keep everything usable on mobile ───────────────── */
+@media (max-width: 768px) {
+    .score-tile { border-radius: 12px; }
+    #top-nav { padding-left: 16px; padding-right: 16px; }
+}
+/* ═══════════════════════════════════════════════════════════════════
+   MOB-05: Landscape mode — compress test screens vertically
+═══════════════════════════════════════════════════════════════════ */
+@media (orientation: landscape) and (max-height: 500px) {
+    .opto-stage   { min-height: auto; padding: 8px 0; }
+    .snellen-stats{ display: none; }
+    .eye-cover-reminder { padding: 6px 12px; }
+    .choice-grid  { gap: 6px; }
+    .choice-btn   { padding: 10px 8px; font-size: 15px; }
+    .test-header  { margin-bottom: 8px; }
+    details[style*="About this test"] { display: none; }
+    #pip          { display: none; }
+}
+
+/* MOB-06: Enforce 44×44px minimum touch targets everywhere */
+button, [role="button"], input[type="submit"], select, .choice-btn,
+.ga-dismiss {
+    min-height: 44px;
+}
+.choice-btn { min-width: 44px; }
+
+/* MOB-07: iOS Safari — smooth scroll inside fixed screens */
+.screen, #screen-results {
+    -webkit-overflow-scrolling: touch;
+    overflow-y: auto;
+}
+/* Prevent momentum scroll from bleeding to body on iOS */
+body { overscroll-behavior: none; }
+
+/* PERF-04: Hint to browser to subset fonts to Latin only */
+@font-face { font-display: swap; unicode-range: U+0020-024F; }
+/* ═══════════════════════════════════════════════════════════════════
+   END REMAINING FIXES
+═══════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   LAPTOP-01: Test screens were sized for mobile and never scaled back
+   up for larger viewports — on a laptop everything sat tiny in a
+   600px column with empty space on either side. ~50% bigger text and
+   controls on the four test screens (Snellen/Near/Contrast/Diopter),
+   at ≥1024px width only (phones/tablets untouched).
+
+   Deliberately NOT resized here: the Snellen optotype (.opto-row) and
+   the near/contrast/diopter <canvas> elements — their sizing is
+   calibration-driven (physically accurate letter/gap size at a given
+   distance), computed dynamically in JS. Scaling those via CSS would
+   either blur fixed-resolution canvas content or throw off the
+   physical-accuracy math the whole app is built on. Only surrounding
+   chrome — headers, instructions, answer buttons, result text — is
+   scaled here.
+═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 1024px) {
+    #screen-snellen .screen-inner,
+    #screen-near .screen-inner,
+    #screen-contrast .screen-inner,
+    #screen-diopter .screen-inner {
+        max-width: 900px;
+    }
+
+    #screen-snellen .test-header,
+    #screen-near .test-header,
+    #screen-contrast .test-header,
+    #screen-diopter .test-header {
+        margin-bottom: 21px;
+    }
+    #screen-snellen .test-meta .test-name,
+    #screen-near .test-meta .test-name,
+    #screen-contrast .test-meta .test-name,
+    #screen-diopter .test-meta .test-name { font-size: 15px; }
+    #screen-snellen .test-meta .test-lvl,
+    #screen-near .test-meta .test-lvl,
+    #screen-contrast .test-meta .test-lvl,
+    #screen-diopter .test-meta .test-lvl { font-size: 19px; }
+
+    #screen-snellen .eye-cover-reminder,
+    #screen-near .eye-cover-reminder,
+    #screen-diopter .eye-cover-reminder {
+        font-size: 16px;
+        padding: 15px 21px;
+        gap: 12px;
+    }
+
+    #screen-snellen .test-question,
+    #screen-near .test-question,
+    #screen-contrast .test-question,
+    #screen-diopter .test-question {
+        font-size: 19px;
+        margin-bottom: 21px;
+    }
+
+    #screen-snellen .instr,
+    #screen-near .instr,
+    #screen-contrast .instr,
+    #screen-diopter .instr {
+        padding: 18px 24px;
+        gap: 18px;
+    }
+    #screen-snellen .instr-icon,
+    #screen-near .instr-icon,
+    #screen-contrast .instr-icon,
+    #screen-diopter .instr-icon { font-size: 24px; }
+    #screen-snellen .instr-text,
+    #screen-near .instr-text,
+    #screen-contrast .instr-text,
+    #screen-diopter .instr-text { font-size: 18px; }
+
+    /* Snellen answer buttons (not the calibrated stimulus above them) */
+    #screen-snellen .choice-grid { gap: 14px; max-width: 640px; margin-left:auto; margin-right:auto; }
+    #screen-snellen .choice-btn { padding: 21px 9px; font-size: 30px; min-width: 66px; border-radius: 13px; }
+
+    /* Near answer buttons */
+    #screen-near .near-gap-grid { max-width: 510px; gap: 15px; }
+    #screen-near .near-gap-btn { font-size: 33px; padding: 27px 0; border-radius: 15px; }
+    #screen-near .near-dist-warn { font-size: 18px; padding: 12px 21px; }
+
+    /* Contrast answer buttons */
+    #screen-contrast .btn { font-size: 17px; min-width: 180px !important; min-height: 60px !important; padding: 16px 20px; }
+
+    /* Diopter — result readout and controls */
+    #screen-diopter .diop-dist-label { font-size: 17px; }
+    #screen-diopter .diop-phase { font-size: 15px; }
+    #screen-diopter .diop-result-box { padding: 30px; }
+    #screen-diopter .diop-power { font-size: 78px; }
+    #screen-diopter .diop-power-label { font-size: 17px; }
+    #screen-diopter .diop-category { font-size: 19px; }
+    #screen-diopter #diop-blur-btn { font-size: 19px; padding: 20px !important; }
+
+    /* Shared action buttons across all four test screens */
+    #screen-snellen .btn-danger,
+    #screen-near .btn-outline,
+    #screen-diopter .btn-outline.btn-sm {
+        font-size: 16px;
+        padding: 14px 22px;
+    }
+}
+    </style>
+    <style id="rs-style">
+        /* ══ RESULTS SCREEN (rs-*) ═══════════════════════════════════════════
+           Type: golden-ratio ladder anchored on --s0 (19px desktop / 17px phone):
+                 s0 · s1 = ×1.618 · s2 = ×2.618 · s3 = ×4.236 · s4 = ×6.854
+           Space: Fibonacci steps 8 · 13 · 21 · 34 · 55 · 89.
+           Colour: navy/gold on light page; footer classic dark grey. */
+        #screen-results, #hist-modal {
+            --rs-bg: #F2F4F8; --rs-navy: #0B1B3F; --rs-gold: #FFC83D; --rs-gold-deep: #A87900;
+            --rs-ink-2: #33415F; --rs-mist: #CBD5EE;
+            --rs-foot: #25292F; --rs-foot-line: #3C424C; --rs-foot-text: #DADFE7; --rs-foot-dim: #AEB6C2;
+            --f1: 8px; --f2: 13px; --f3: 21px; --f4: 34px; --f5: 55px; --f6: 89px;
+            --s0: clamp(17px, .35vw + 15.6px, 19px);
+            --s1: calc(var(--s0) * 1.618);
+            --s2: calc(var(--s0) * 2.618);
+            --s3: calc(var(--s0) * 4.236);
+            --s4: calc(var(--s0) * 6.854);
+            font-family: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        }
+        #screen-results { padding: 0; background: var(--rs-bg); color: var(--rs-navy); }
+        #screen-results *, #hist-modal * { box-sizing: border-box; }
+        :where(#screen-results, #hist-modal) :is(button, input) { font: inherit; }   /* zero specificity: class rules below must win */
+        #screen-results h1, #screen-results h2, #hist-modal h2 { font-family: inherit; }   /* global h1/h2 rule is a serif */
+
+        .rs-main { flex: 1 0 auto; width: 100%; max-width: 1120px;
+            padding: calc(72px + var(--safe-top, 0px) + var(--f4)) var(--f3) 0; }
+
+        .rs-head { text-align: center; }
+        .rs-title { margin: 0; font-size: clamp(var(--s1), 5.4vw + 6px, var(--s2)); line-height: 1.1;
+            font-weight: 700; letter-spacing: -.025em; color: var(--rs-navy); }
+        .rs-title:focus { outline: none; }
+
+        .rs-boxes { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(10px, 2.4vw, var(--f3)); margin-top: var(--f4); }
+        .rs-box { container-type: inline-size; display: flex; flex-direction: column; align-items: center; text-align: center;
+            background: linear-gradient(to bottom, var(--rs-gold) 0, var(--rs-gold) clamp(6px, .8vw, 13px), var(--rs-navy) clamp(6px, .8vw, 13px));
+            color: #fff;
+            border-radius: clamp(18px, 3vw, var(--f4));
+            padding: clamp(28px, 4.6vw, var(--f5)) clamp(13px, 3vw, var(--f4)) clamp(21px, 4vw, var(--f5));
+            box-shadow: 0 var(--f4) var(--f5) calc(var(--f3) * -1) rgba(11, 27, 63, .55); }
+        .rs-eye { margin: 0; font-size: max(var(--s0), min(var(--s1), 12.5cqi)); font-weight: 700; letter-spacing: -.01em; color: #fff; }
+        .rs-num { margin: clamp(13px, 4cqi, var(--f4)) 0; color: var(--rs-gold); font-weight: 700; line-height: 1;
+            letter-spacing: -.035em; font-variant-numeric: lining-nums tabular-nums;
+            font-size: clamp(2.4rem, 12vw, 7rem);               /* fallback: no container-query units */
+            font-size: min(var(--s4), 31cqi); }
+        .rs-state { margin: 0; font-size: max(var(--s0), min(var(--s1), 9.5cqi)); font-weight: 700; line-height: 1.15; color: #fff; }
+        .rs-line { margin: var(--f2) 0 0; font-size: var(--s0); line-height: 1.5; color: var(--rs-mist); }
+        .rs-box[data-tone="none"] .rs-num { color: var(--rs-mist); }
+        .rs-box.is-loading .rs-num { animation: rs-pulse 1.3s ease-in-out infinite; }
+        @keyframes rs-pulse { 0%, 100% { opacity: .35 } 50% { opacity: 1 } }
+
+        .rs-note { margin: var(--f3) auto 0; text-align: center; }
+        .rs-note:empty { display: none; }
+        .rs-retry { margin-top: var(--f2); min-height: 55px; padding: 0 var(--f4); border: 3px solid var(--rs-navy); border-radius: 13px;
+            background: #fff; color: var(--rs-navy); font-size: var(--s0); font-weight: 700; cursor: pointer; }
+        .rs-retry:focus-visible { outline: 4px solid var(--rs-navy); outline-offset: 3px; }
+
+        /* ── Final score + four small boxes (plain numbers, no dials) ── */
+        .rs-score { --tone: #8FA0C8; display: grid; gap: var(--f3); margin-top: var(--f4);
+            padding: clamp(21px, 4vw, var(--f4)); background: #fff; border: 1.5px solid #D5DCEE;
+            border-radius: clamp(18px, 3vw, var(--f4)); box-shadow: 0 var(--f3) var(--f4) calc(var(--f2) * -1) rgba(11, 27, 63, .22); }
+        .rs-score[data-tone="ok"] { --tone: #0A7C3E; } .rs-score[data-tone="mid"] { --tone: #B45309; } .rs-score[data-tone="low"] { --tone: #C81E1E; }
+        .rs-score-title { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--f1); font-size: var(--s0); font-weight: 700; color: var(--rs-ink-2); }
+        .rs-chip { padding: 1px 10px; border: 1.5px solid var(--rs-ink-2); border-radius: 99px; font-size: var(--s0); font-weight: 600; }
+        .rs-score-line { margin: var(--f2) 0 0; display: flex; align-items: baseline; gap: var(--f1); line-height: 1; }
+        .rs-score-num { font-size: var(--s3); font-weight: 700; letter-spacing: -.04em; color: var(--rs-navy); font-variant-numeric: lining-nums tabular-nums; }
+        .rs-score-of { font-size: var(--s1); font-weight: 600; color: var(--rs-ink-2); }
+        .rs-verdict { margin: var(--f2) 0 0; display: flex; align-items: center; gap: var(--f1); font-size: var(--s1); font-weight: 700; line-height: 1.15; color: var(--rs-navy); }
+        .rs-dot { flex: none; width: .6em; height: .6em; border-radius: 50%; background: var(--tone); }
+        .rs-score.is-loading .rs-score-num { animation: rs-pulse 1.3s ease-in-out infinite; }
+        .rs-mini-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--f2); }
+        .rs-mini { --tone: #8FA0C8; display: flex; flex-direction: column; gap: 2px; padding: var(--f3) var(--f2) var(--f2); border-radius: 13px;
+            background: linear-gradient(to bottom, var(--tone) 0, var(--tone) 5px, var(--rs-bg) 5px); }
+        .rs-mini[data-tone="ok"] { --tone: #0A7C3E; } .rs-mini[data-tone="mid"] { --tone: #B45309; } .rs-mini[data-tone="low"] { --tone: #C81E1E; }
+        .rs-mini-label { font-size: var(--s0); font-weight: 700; color: var(--rs-ink-2); }
+        .rs-mini-val { font-size: var(--s1); font-weight: 700; line-height: 1.1; color: var(--rs-navy); font-variant-numeric: lining-nums tabular-nums; }
+        .rs-mini-cap { min-height: 1.3em; font-size: var(--s0); line-height: 1.3; color: var(--rs-ink-2); }
+        @media (min-width: 900px) { .rs-score { grid-template-columns: .382fr .618fr; align-items: center; gap: var(--f4); } }
+        @media (min-width: 1100px) { .rs-mini-grid { grid-template-columns: repeat(4, 1fr); } }
+
+        .rs-pdf { display: flex; align-items: center; justify-content: center; gap: var(--f3); width: 100%; min-height: var(--f6);
+            margin-top: var(--f4); padding: var(--f3) var(--f4); cursor: pointer; text-align: left;
+            background: var(--rs-gold); color: var(--rs-navy); border: 3px solid var(--rs-navy); border-radius: var(--f3);
+            font-size: var(--s1); font-weight: 700; line-height: 1.15; letter-spacing: -.015em;
+            box-shadow: 0 8px 0 var(--rs-navy);
+            transition: transform .12s ease, box-shadow .12s ease; }
+        .rs-pdf:hover { transform: translateY(3px); box-shadow: 0 5px 0 var(--rs-navy); }
+        .rs-pdf:active { transform: translateY(8px); box-shadow: 0 0 0 var(--rs-navy); }
+        .rs-pdf:focus-visible { outline: 4px solid var(--rs-navy); outline-offset: 6px; }
+        .rs-pdf:disabled { cursor: progress; }
+        .rs-pdf svg { flex: none; width: 1.5em; height: 1.5em; }
+        .rs-pdf-text { display: flex; flex-direction: column; gap: 4px; }
+        .rs-pdf-sub { font-size: var(--s0); font-weight: 500; letter-spacing: 0; }
+
+        /* ── Footer ── */
+        .rs-footer { align-self: stretch; margin-top: var(--f6); background: var(--rs-foot); color: var(--rs-foot-text);
+            border-top: 5px solid var(--rs-gold);
+            padding: var(--f5) var(--f3) calc(var(--f4) + env(safe-area-inset-bottom, 0px)); }
+        /* The "install app" banner is fixed to the bottom edge; while it is showing, leave room so it never hides the legal line. */
+        body:has(#install-bar[style*="flex"]) .rs-footer { padding-bottom: calc(var(--f4) + 88px + env(safe-area-inset-bottom, 0px)); }
+        .rs-footer-inner { max-width: 1078px; margin: 0 auto; }   /* 1120 − 2×21 padding: left edge lines up with the boxes */
+        .rs-fgrid { display: grid; grid-template-columns: 1.618fr 1fr 1fr 1fr; gap: var(--f4); }
+        .rs-brand-row { display: flex; align-items: center; gap: var(--f2); }
+        .rs-logo { flex: none; width: 55px; height: 55px; border-radius: 16px; background: var(--rs-gold); color: var(--rs-navy);
+            display: flex; align-items: center; justify-content: center; }
+        .rs-logo svg { width: 31px; height: 31px; }
+        .rs-wordmark { font-size: var(--s1); font-weight: 700; letter-spacing: -.02em; color: #fff; line-height: 1; }
+        .rs-tag { margin: var(--f3) 0 0; max-width: 24em; font-size: var(--s0); line-height: 1.55; color: var(--rs-foot-text); }
+        .rs-mail { display: inline-flex; align-items: center; min-height: 55px; margin-top: var(--f3); padding: 0 var(--f3);
+            border: 2px solid var(--rs-gold); border-radius: 13px; color: var(--rs-gold); font-size: var(--s0); font-weight: 700; text-decoration: none; white-space: nowrap; }
+        .rs-mail:hover { background: var(--rs-gold); color: var(--rs-navy); }
+        .rs-fh { margin: 0 0 var(--f2); font-size: var(--s0); font-weight: 700; color: #fff; letter-spacing: .01em; }
+        .rs-flist { list-style: none; margin: 0; padding: 0; }
+        .rs-flink { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 6px 0; margin: 0; border: 0; background: none;
+            color: var(--rs-foot-text); font-size: var(--s0); line-height: 1.35; text-align: left; text-decoration: none; cursor: pointer; }
+        .rs-flink:hover { color: var(--rs-gold); text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 2px; }
+        .rs-flink:focus-visible, .rs-mail:focus-visible { outline: 3px solid var(--rs-gold); outline-offset: 3px; border-radius: 4px; }
+        .rs-trust { list-style: none; margin: var(--f5) 0 0; padding: var(--f4) 0 0; border-top: 1px solid var(--rs-foot-line);
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--f3); }
+        .rs-trust li { display: flex; gap: var(--f2); align-items: flex-start; font-size: var(--s0); line-height: 1.4; color: var(--rs-foot-text); }
+        .rs-trust svg { flex: none; width: 1.3em; height: 1.3em; margin-top: .1em; color: var(--rs-gold); }
+        .rs-legal { margin: var(--f4) 0 0; padding-top: var(--f3); border-top: 1px solid var(--rs-foot-line);
+            display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--f1) var(--f4);
+            font-size: var(--s0); line-height: 1.5; color: var(--rs-foot-dim); }
+        .rs-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+        @media (max-width: 960px) {
+            .rs-fgrid { grid-template-columns: 1fr 1fr; }
+            .rs-brand { grid-column: 1 / -1; }
+            .rs-trust { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 560px) {
+            .rs-main { padding-left: 16px; padding-right: 16px; }
+            .rs-footer { padding-left: 16px; padding-right: 16px; }
+            .rs-pdf { padding: var(--f3) var(--f3); gap: var(--f2); }
+            .rs-fgrid, .rs-trust { grid-template-columns: 1fr; }
+        }
+
+        /* ── "Save my results" dialog (keeps the existing HISTORY_UI element ids) ── */
+        .rs-modal { display: none; position: fixed; inset: 0; z-index: 3000; align-items: center; justify-content: center;
+            padding: var(--f3); background: rgba(11, 27, 63, .78); overflow-y: auto; }
+        .rs-modal.is-open { display: flex; }
+        .rs-modal-card { position: relative; width: 100%; max-width: 580px; max-height: 92vh; overflow-y: auto;
+            background: #fff; color: var(--rs-navy); border-radius: var(--f3); padding: var(--f4); box-shadow: 0 var(--f4) var(--f5) rgba(0, 0, 0, .4); }
+        .rs-modal-card h2 { margin: 0 var(--f5) var(--f2) 0; font-size: var(--s1); line-height: 1.15; letter-spacing: -.02em; }
+        .rs-modal-card p { margin: 0 0 var(--f3); font-size: var(--s0); line-height: 1.55; color: var(--rs-ink-2); }
+        .rs-modal-card label { display: block; margin: var(--f3) 0 var(--f1); font-size: var(--s0); font-weight: 700; }
+        .rs-modal-x { position: absolute; top: var(--f2); right: var(--f2); width: 55px; height: 55px; border: 0; border-radius: 13px;
+            background: #E7EBF3; color: var(--rs-navy); font-size: 31px; line-height: 1; cursor: pointer; }
+        .rs-modal-x:focus-visible, .rs-row button:focus-visible, .rs-danger:focus-visible { outline: 4px solid var(--rs-navy); outline-offset: 3px; }
+        .rs-row { display: flex; gap: var(--f1); flex-wrap: wrap; }
+        .rs-row input { flex: 1 1 200px; min-height: 55px; padding: 0 var(--f2); border: 2px solid #6B7A99; border-radius: 13px; font-size: 17px; color: var(--rs-navy); background: #fff; }
+        .rs-row input:focus { outline: 4px solid var(--rs-gold); outline-offset: 1px; border-color: var(--rs-navy); }
+        .rs-row button { min-height: 55px; padding: 0 var(--f3); border: 2px solid var(--rs-navy); border-radius: 13px;
+            background: var(--rs-navy); color: #fff; font-size: var(--s0); font-weight: 700; cursor: pointer; }
+        .rs-row button.alt { background: #fff; color: var(--rs-navy); }
+        .rs-hint { margin: var(--f1) 0 0 !important; font-size: var(--s0); }
+        .rs-danger { margin-top: var(--f3); min-height: 55px; padding: 0 var(--f3); border: 2px solid #9B1C1C; border-radius: 13px;
+            background: #fff; color: #9B1C1C; font-size: var(--s0); font-weight: 700; cursor: pointer; }
+        #hist-status { margin: var(--f3) 0 var(--f2); font-size: var(--s0); color: var(--rs-ink-2); }
+        #hist-entries { display: flex; flex-direction: column; gap: var(--f1); max-height: 300px; overflow-y: auto; font-size: var(--s0); }
+
+        /* The research-mode badge (hidden key-sequence tool) must never sit on top of the results page */
+        #screen-results.active ~ #research-badge { display: none !important; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .rs-pdf { transition: none; }
+            .rs-box.is-loading .rs-num { animation: none; opacity: .6; }
+        }
+        @media print {
+            #screen-results .rs-footer, #screen-results .rs-pdf, #screen-results .rs-retry { display: none !important; }
+            #screen-results { background: #fff; }
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- LOADING — clean medical spinner -->
+    <div id="loading" style="background:var(--surface-2)">
+        <div style="position:relative;width:72px;height:72px;display:flex;align-items:center;justify-content:center;margin-bottom:6px">
+            <!-- Outer track -->
+            <div style="position:absolute;inset:0;border-radius:50%;border:3px solid #E2E8F0"></div>
+            <!-- Brand spinner -->
+            <div style="position:absolute;inset:0;border-radius:50%;border:3px solid transparent;border-top-color:#1A56DB;animation:spin 0.85s linear infinite"></div>
+            <!-- Eye icon centre -->
+            <span style="font-size:26px;filter:none">👁</span>
+        </div>
+        <div class="load-text" id="load-title" style="color:#0F172A;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;letter-spacing:-.01em;margin-bottom:4px">OcuScan Pro</div>
+        <div class="load-sub" id="load-sub" style="color:#64748B;font-family:'DM Sans',sans-serif;font-size:13px">Preparing your screening…</div>
+    </div>
+
+    <!-- TOP NAV -->
+    <div id="top-nav" role="banner">
+        <div class="nav-logo">
+            <!-- Brand icon instead of broken img -->
+            <div style="width:28px;height:28px;border-radius:8px;background:#1A56DB;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">👁</div>
+            <span style="display:inline-flex;align-items:center;gap:0;font-weight:700;color:#0F172A;letter-spacing:-.02em">
+                OcuScan<span style="color:#1A56DB;font-weight:400">Pro</span>
+            </span>
+        </div>
+        <div class="nav-right">
+            <!-- Desktop entry-only buttons -->
+            <div class="entry-only nav-entry-desktop" style="gap:18px">
+                <button class="nav-what-is" onclick="document.getElementById('wp-modal').style.display='block'">What is OcuScan?</button>
+                <a href="mailto:ocuscan1@gmail.com" style="text-decoration:none"><button class="nav-contact-btn">Contact Us</button></a>
+            </div>
+            <div id="nav-dist-pill">DIST: — cm</div>
+            <div id="nav-font-pill" style="display:none;font-family:'Space Mono',monospace;font-size:9px;padding:4px 9px;border-radius:99px;background:rgba(0,230,118,.08);border:1px solid rgba(0,230,118,.2);color:var(--green);letter-spacing:.04em;white-space:nowrap"></div>
+            <div id="nav-eye-pill"></div>
+            <button id="tts-toggle" title="Disable voice" onclick="window.TTS&&window.TTS.toggle?window.TTS.toggle():null" aria-label="Toggle voice narration">🔊</button>
+            <!-- Mobile hamburger — splash only -->
+            <button class="nav-hamburger entry-only" id="nav-hamburger" onclick="NAV_MENU.toggle()" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </div>
+    <!-- Mobile nav drawer -->
+    <div id="nav-drawer" onclick="NAV_MENU.close()" style="background:rgba(15,23,42,.5);backdrop-filter:blur(8px)">
+        <div id="nav-drawer-inner" onclick="event.stopPropagation()" style="background:#FFFFFF;border-right:1px solid #E2E8F0;box-shadow:4px 0 24px rgba(0,0,0,.12)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid #E2E8F0">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div style="width:28px;height:28px;border-radius:8px;background:#1A56DB;display:flex;align-items:center;justify-content:center;font-size:14px">👁</div>
+                    <span style="font-weight:700;font-size:16px;color:#0F172A;letter-spacing:-.01em">OcuScan<span style="color:#1A56DB;font-weight:400">Pro</span></span>
+                </div>
+                <button onclick="NAV_MENU.close()" style="background:none;border:none;color:#64748B;font-size:20px;cursor:pointer;padding:6px;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;border-radius:8px" aria-label="Close menu">✕</button>
+            </div>
+            <button class="nav-drawer-item" onclick="document.getElementById('wp-modal').style.display='block';NAV_MENU.close()" style="color:#0F172A;background:none;border:none;width:100%;text-align:left;padding:12px 4px;font-size:15px;font-family:'DM Sans',sans-serif;cursor:pointer;border-radius:8px;min-height:44px">🔬 What is OcuScan?</button>
+            <a href="mailto:ocuscan1@gmail.com" style="text-decoration:none"><button class="nav-drawer-item" style="color:#0F172A;background:none;border:none;width:100%;text-align:left;padding:12px 4px;font-size:15px;font-family:'DM Sans',sans-serif;cursor:pointer;border-radius:8px;min-height:44px">✉ Contact Us</button></a>
+        </div>
+    </div>
+
+    <!-- PROGRESS -->
+    <div id="prog-wrap">
+        <div id="prog-fill" style="width:0%"></div>
+    </div>
+
+    <!-- PIP CAMERA -->
+    <!-- PIP CAMERA WIDGET — MOB-03 / DESIGN-07: premium trust element -->
+    <div id="pip" style="display:none;position:fixed;bottom:22px;right:16px;z-index:850;background:#FFFFFF;border:1px solid #E2E8F0;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.10);padding:10px;flex-direction:column;gap:6px;width:176px">
+
+        <!-- Status header row -->
+        <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:5px">
+                <div id="pip-status-dot" style="width:7px;height:7px;border-radius:50%;background:#E2E8F0;transition:background .4s"></div>
+                <span class="pip-label" id="pip-status-label" style="font-size:11px;color:#64748B;font-family:'DM Sans',sans-serif;font-weight:600;letter-spacing:.04em;text-transform:uppercase">Initialising</span>
+            </div>
+            <button onclick="document.getElementById('pip').style.display='none'" style="background:none;border:none;color:#CBD5E1;font-size:14px;cursor:pointer;padding:2px 4px;line-height:1;border-radius:4px;min-width:24px;min-height:24px;display:flex;align-items:center;justify-content:center" title="Hide camera preview" aria-label="Hide camera preview">✕</button>
+        </div>
+
+        <!-- Camera feed with face guide overlay -->
+        <div id="pip-box" style="position:relative;width:156px;height:110px;border-radius:10px;overflow:hidden;background:#F1F5F9">
+            <video id="pip-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1)"></video>
+            <canvas id="pip-canvas" width="156" height="110" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+            <!-- Face guide ellipse -->
+            <svg id="pip-face-guide" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 156 110" aria-hidden="true">
+                <ellipse cx="78" cy="55" rx="36" ry="46" fill="none" stroke-width="1.5" stroke-dasharray="4 3" id="pip-guide-ellipse" stroke="rgba(148,163,184,.5)"/>
+            </svg>
+            <!-- Distance badge overlay -->
+            <div id="pip-dist-overlay" style="position:absolute;bottom:6px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,.72);color:#fff;font-size:11px;font-family:'Space Mono',monospace;padding:3px 8px;border-radius:99px;white-space:nowrap;display:none">— cm</div>
+        </div>
+
+        <!-- Distance bar -->
+        <div style="height:3px;background:#E2E8F0;border-radius:3px;overflow:hidden">
+            <div id="pip-dist-fill" style="height:100%;width:40%;background:#1A56DB;border-radius:3px;transition:width .4s ease"></div>
+        </div>
+
+        <!-- Distance text -->
+        <div id="pip-dist-text" style="font-size:12px;color:#475569;font-family:'DM Sans',sans-serif;text-align:center">Distance: — cm</div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast"></div>
+
+    <!-- FOOTER (entry screen only — shown while #screen-calib is active) -->
+    <div id="entry-footer">
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <span class="footer-logo-text">OcuScan<span style="color:#1A56DB">Pro</span></span>
+                <span class="footer-tagline">Vision screening tool · Not a medical device</span>
+            </div>
+            <nav class="footer-links-row">
+                <a class="footer-link" href="mailto:ocuscan1@gmail.com">Contact</a>
+                <span class="footer-sep">·</span>
+                <span class="footer-link" onclick="document.getElementById('wp-modal').style.display='block'">Methodology</span>
+                <span class="footer-sep">·</span>
+                <span class="footer-link" onclick="App.deleteAllData()">Clear Data</span>
+                <span class="footer-sep">·</span>
+                <span style="color:rgba(255,255,255,.2)">© 2025 Surya Productions</span>
+            </nav>
+        </div>
+        <div style="text-align:center;padding:6px 20px 10px;font-size:11px;color:#94A3B8;letter-spacing:.02em;line-height:1.7;font-family:'DM Sans',sans-serif">
+            🔒 HTTPS only &nbsp;·&nbsp; 🚫 No video/image storage &nbsp;·&nbsp; ⏱ Sessions expire in 4 hours &nbsp;·&nbsp; 📷 Camera stays on your device
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+     SETUP: STEP 1 — CAMERA
+══════════════════════════════════════════════════════════ -->
+    <!-- Hidden DOM container — off-screen so MediaPipe gets real bounding dimensions -->
+    <div style="position:absolute;left:-9999px;top:-9999px;width:640px;height:480px;overflow:hidden;opacity:0;pointer-events:none" aria-hidden="true">
+        <video id="setup-video" autoplay playsinline muted></video>
+        <canvas id="face-canvas"></canvas>
+        <div id="cam-hud-text"></div>
+        <div id="hud-iris"></div>
+        <div id="hud-dist-px"></div>
+        <div id="hud-conf"></div>
+        <div id="dist-val"></div>
+        <div id="dist-fill"></div>
+        <div id="dist-pointer"></div>
+        <div id="chk-cam"><span class="chk-icon"></span><span class="chk-val"></span></div>
+        <div id="chk-iris"><span class="chk-icon"></span><span class="chk-val"></span></div>
+        <div id="chk-dist"><span class="chk-icon"></span><span class="chk-val"></span></div>
+        <div id="chk-bright"><span class="chk-icon"></span><span class="chk-val"></span></div>
+        <div id="chk-glasses"><span class="chk-icon"></span><span class="chk-val"></span></div>
+        <div id="manual-section">
+            <input type="range" id="manual-slider" min="30" max="100" value="60">
+            <span id="manual-val">60 cm</span>
+        </div>
+        <div id="btn-cam"></div>
+        <div id="btn-setup-next"></div>
+        <div id="sd0"></div><div id="sd1"></div><div id="sd2"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+     SETUP: STEP 2 — RULER CALIBRATION
+══════════════════════════════════════════════════════════ -->
+    <div class="screen" id="screen-calib">
+        <div class="calib-reveal">
+            <div id="calib-eyebrow">Screen Calibration</div>
+            <div id="calib-heading">Grab a ruler.</div>
+            <p id="calib-body">Hold it flat against your screen and drag the slider until the bar below matches exactly 2&nbsp;cm.</p>
+        </div>
+
+        <div class="calib-reveal calib-hero-wrap" aria-hidden="true">
+            <span id="calib-hero-num">2</span>
+            <span id="calib-hero-unit">cm</span>
+        </div>
+
+        <div class="calib-reveal calib-ruler-wrap">
+            <div class="calib-ruler-track">
+                <div id="calib-bar">
+                    <span class="maj" style="left:25%"></span>
+                    <span class="maj" style="left:50%"></span>
+                    <span class="maj" style="left:75%"></span>
+                    <span id="calib-zero-label">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="calib-reveal">
+            <div id="calib-px-readout">— px</div>
+            <div class="calib-slider-wrap">
+                <input type="range" id="calib-slider" min="40" max="220" step="0.5" aria-label="Adjust bar width to match 2 centimeters on a physical ruler">
+            </div>
+        </div>
+
+        <div class="calib-reveal calib-actions">
+            <button id="calib-confirm-btn" class="btn btn-primary btn-full btn-lg" style="max-width:340px" onclick="App.confirmCalib()">Yes, that's 2 cm</button>
+            <button id="calib-skip-link" onclick="App.skipCalib()">Skip — I don't have a ruler</button>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+     SNELLEN TEST
+══════════════════════════════════════════════════════════ -->
+    <div class="screen" id="screen-snellen" style="padding-top:64px">
+        <div class="screen-inner">
+            <div class="test-header">
+                <div class="test-meta">
+                    <div class="test-name">VISUAL ACUITY — <span id="s-eye-label" style="color:var(--amber)">RIGHT EYE (OD)</span></div>
+                    <div class="test-lvl" id="s-level-label">Level 1 / 7</div>
+                </div>
+                <button class="btn btn-xs btn-outline" onclick="location.href='index.html'">✕ Exit</button>
+            </div>
+
+            <div class="eye-cover-reminder" id="s-eye-reminder">
+                🤚 <span id="s-reminder-text">Cover your LEFT eye. Testing RIGHT eye only.</span>
+                <span id="s-cover-status" style="margin-left:auto;font-size:10px;color:var(--amber)">CHECKING…</span>
+            </div>
+
+            <div class="snellen-stats">
+                <div class="sstat">
+                    <div class="sstat-l">Distance</div>
+                    <div class="sstat-v" id="sstat-dist">— cm</div>
+                </div>
+            </div>
+
+            <div class="opto-stage" id="opto-stage" role="img" aria-label="Letter to identify — look at the screen and select the matching letter below">
+                <div class="opto-row" id="opto-row" aria-hidden="true"></div>
+            </div>
+
+            <p class="text-dim text-center mb-3" style="font-size:12px">Select the letter you see. Answer quickly — don't overthink.</p>
+
+            <div class="choice-grid" id="choice-grid" role="group" aria-label="Letter choices"></div>
+
+            <div style="display:flex;gap:9px;flex-wrap:wrap;justify-content:center;margin-bottom:10px">
+                <button id="cant-read-btn" class="btn btn-sm btn-danger" onclick="App.cantRead()">Cannot Read</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+     NEAR VISION TEST
+══════════════════════════════════════════════════════════ -->
+    <div class="screen" id="screen-near" style="padding-top:68px">
+        <div class="screen-inner">
+            <div class="test-header">
+                <div class="test-meta">
+                    <div class="test-name">NEAR VISION — <span id="near-eye-label" style="color:var(--amber)">RIGHT EYE (OD)</span></div>
+                    <div class="test-lvl" id="near-step-lbl">Level 1 / 9</div>
+                </div>
+                <button class="btn btn-xs btn-outline" onclick="location.href='index.html'">✕ Exit</button>
+            </div>
+            <div class="eye-cover-reminder" id="near-eye-reminder">
+                🤚 <span id="near-reminder-text">Cover your LEFT eye.</span>
+            </div>
+            <div class="near-dist-warn" id="near-dist-warn">⚠ Hold screen at ~40 cm — move <span id="near-dist-dir">closer</span></div>
+            <div class="near-stage">
+                <canvas id="near-canvas" width="280" height="180"></canvas>
+            </div>
+            <p class="test-question" id="near-instruction">Which direction is the gap opening?</p>
+            <div class="near-gap-grid">
+                <button class="near-gap-btn" onclick="App.nearAnswer('up')">↑</button>
+                <button class="near-gap-btn" onclick="App.nearAnswer('right')">→</button>
+                <button class="near-gap-btn" onclick="App.nearAnswer('down')">↓</button>
+                <button class="near-gap-btn" onclick="App.nearAnswer('left')">←</button>
+            </div>
+            <div class="instr">
+                <div class="instr-icon">📏</div>
+                <div class="instr-text"><strong>Hold screen at arm's length (~40 cm).</strong> The ring is resized live from your measured distance, so it always looks the same size to your eye, and it shrinks each time you get one right. The gap is one fifth of the ring, which is 1 arc-minute at 6/6.</div>
+            </div>
+        </div>
+    </div>
+    <!-- ══════════════════════════════════════════════════════════
+     RESULTS
+══════════════════════════════════════════════════════════ -->
+    <!-- ══════════════════════════════════════════════════════════
+         RESULTS — two big power boxes · big PDF button · dark-grey footer.
+         Plain language only. Element ids used by index.js: rs-box-OD/OS,
+         rs-num-*, rs-state-*, rs-line-*, rs-note, res-pdf-btn, res-pdf-label.
+    ══════════════════════════════════════════════════════════ -->
+    <div class="screen" id="screen-results">
+        <main class="rs-main">
+            <header class="rs-head">
+                <h1 class="rs-title" id="rs-title">Your estimated glasses power</h1>
+            </header>
+
+            <section class="rs-boxes" id="rs-boxes" aria-live="polite" aria-labelledby="rs-title">
+                <article class="rs-box is-loading" id="rs-box-OD" role="group" data-tone="none">
+                    <h2 class="rs-eye">Right eye</h2>
+                    <p class="rs-num" id="rs-num-OD">–.––</p>
+                    <p class="rs-state" id="rs-state-OD">Working it out…</p>
+                    <p class="rs-line" id="rs-line-OD">This takes a few seconds.</p>
+                </article>
+                <article class="rs-box is-loading" id="rs-box-OS" role="group" data-tone="none">
+                    <h2 class="rs-eye">Left eye</h2>
+                    <p class="rs-num" id="rs-num-OS">–.––</p>
+                    <p class="rs-state" id="rs-state-OS">Working it out…</p>
+                    <p class="rs-line" id="rs-line-OS">This takes a few seconds.</p>
+                </article>
+            </section>
+
+            <div class="rs-note" id="rs-note"></div>
+
+            <section class="rs-score is-loading" id="rs-score" data-tone="none" aria-labelledby="rs-score-title">
+                <div class="rs-score-main">
+                    <h2 class="rs-score-title" id="rs-score-title">Vision summary score <span class="rs-chip">Experimental</span></h2>
+                    <p class="rs-score-line"><span class="rs-score-num" id="rs-score-num">–</span><span class="rs-score-of">/ 100</span></p>
+                    <p class="rs-verdict"><span class="rs-dot" aria-hidden="true"></span><span id="rs-score-verdict-text">Working it out…</span></p>
+                </div>
+                <ul class="rs-mini-grid">
+                    <li class="rs-mini" id="rs-mini-acuity"   data-tone="none"><span class="rs-mini-label">Distance</span><span class="rs-mini-val">–</span><span class="rs-mini-cap"></span></li>
+                    <li class="rs-mini" id="rs-mini-near"     data-tone="none"><span class="rs-mini-label">Reading</span><span class="rs-mini-val">–</span><span class="rs-mini-cap"></span></li>
+                    <li class="rs-mini" id="rs-mini-power"    data-tone="none"><span class="rs-mini-label">Eye power</span><span class="rs-mini-val">–</span><span class="rs-mini-cap"></span></li>
+                    <li class="rs-mini" id="rs-mini-contrast" data-tone="none"><span class="rs-mini-label">Contrast</span><span class="rs-mini-val">–</span><span class="rs-mini-cap"></span></li>
+                </ul>
+            </section>
+
+            <button type="button" class="rs-pdf" id="res-pdf-btn" onclick="App.generatePDF()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>
+                <span class="rs-pdf-text">
+                    <span id="res-pdf-label">Download your report</span>
+                    <span class="rs-pdf-sub">A PDF you can show your eye doctor</span>
+                </span>
+            </button>
+        </main>
+
+        <footer class="rs-footer">
+            <div class="rs-footer-inner">
+                <div class="rs-fgrid">
+                    <div class="rs-brand">
+                        <div class="rs-brand-row">
+                            <span class="rs-logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span>
+                            <span class="rs-wordmark">OcuScan Pro</span>
+                        </div>
+                        <p class="rs-tag">A free eye check you can do on your own screen, in a few minutes, from anywhere.</p>
+                        <a class="rs-mail" href="mailto:ocuscan1@gmail.com" aria-label="Email OcuScan at ocuscan1@gmail.com">ocuscan1@gmail.com</a>
+                    </div>
+
+                    <nav aria-label="Your results">
+                        <h2 class="rs-fh">Your results</h2>
+                        <ul class="rs-flist">
+                            <li><button type="button" class="rs-flink" onclick="App.generatePDF()">Download your report</button></li>
+                            <li><button type="button" class="rs-flink" onclick="RS_UI.openHistory()">Save my results</button></li>
+                            <li><button type="button" class="rs-flink" onclick="RS_UI.retake()">Take the tests again</button></li>
+                            <li><button type="button" class="rs-flink" onclick="App.deleteAllData()">Clear my data from this device</button></li>
+                        </ul>
+                    </nav>
+
+                    <nav aria-label="Eye care">
+                        <h2 class="rs-fh">Eye care</h2>
+                        <ul class="rs-flist">
+                            <li><a class="rs-flink" href="https://www.google.com/search?q=eye+doctor+near+me" target="_blank" rel="noopener noreferrer">Find an eye doctor near you<span class="rs-sr"> (opens in a new tab)</span></a></li>
+                            <li><a class="rs-flink" href="https://www.nhs.uk/nhs-services/opticians/visiting-an-optician" target="_blank" rel="noopener noreferrer">How often to get an eye test<span class="rs-sr"> (opens in a new tab)</span></a></li>
+                            <li><a class="rs-flink" href="https://www.who.int/news-room/fact-sheets/detail/blindness-and-visual-impairment" target="_blank" rel="noopener noreferrer">Facts about vision loss<span class="rs-sr"> (opens in a new tab)</span></a></li>
+                            <li><a class="rs-flink" href="https://www.aios.org/" target="_blank" rel="noopener noreferrer">Eye doctors in India<span class="rs-sr"> (opens in a new tab)</span></a></li>
+                        </ul>
+                    </nav>
+
+                    <nav aria-label="About OcuScan">
+                        <h2 class="rs-fh">About OcuScan</h2>
+                        <ul class="rs-flist">
+                            <li><button type="button" class="rs-flink" onclick="document.getElementById('wp-modal').style.display='block'">How it works</button></li>
+                            <li><button type="button" class="rs-flink" onclick="IRIS_UI.open()">Improve accuracy</button></li>
+                            <li><a class="rs-flink" href="index.html">Back to the start page</a></li>
+                            <li><a class="rs-flink" href="mailto:ocuscan1@gmail.com">Contact us</a></li>
+                        </ul>
+                    </nav>
+                </div>
+
+                <ul class="rs-trust" aria-label="Your privacy">
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>No photos or videos are saved</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Your camera stays on your device</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Secure connection (HTTPS)</li>
+                    <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Your session ends after 4 hours</li>
+                </ul>
+
+                <div class="rs-legal">
+                    <span>© <span id="rs-year">2026</span> Surya Productions. OcuScan Pro is a screening tool, not a medical device.</span>
+                    <span>Always see an eye doctor before you buy glasses.</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- "Save my results" — same element ids HISTORY_UI already uses -->
+    <div class="rs-modal" id="hist-modal" role="dialog" aria-modal="true" aria-labelledby="hist-title">
+        <div class="rs-modal-card">
+            <button type="button" class="rs-modal-x" onclick="RS_UI.closeHistory()" aria-label="Close">×</button>
+            <h2 id="hist-title">Save your results</h2>
+            <p>Pick a secret phrase to save today's results. Use the same phrase later to see how your eyes change over time. You don't need an account.</p>
+            <div id="history-body">
+                <div id="hist-save-section">
+                    <label for="hist-passphrase">Your secret phrase</label>
+                    <div class="rs-row">
+                        <input id="hist-passphrase" type="password" placeholder="At least 4 characters" autocomplete="off">
+                        <button type="button" onclick="HISTORY_UI.save()">Save</button>
+                    </div>
+                    <p class="rs-hint">If you forget the phrase, your saved results can't be found again. That is on purpose.</p>
+                    <label for="hist-load-phrase">Saved before? Enter your phrase</label>
+                    <div class="rs-row">
+                        <input id="hist-load-phrase" type="password" placeholder="Your secret phrase" autocomplete="off">
+                        <button type="button" class="alt" onclick="HISTORY_UI.load()">Show my history</button>
+                    </div>
+                </div>
+                <div id="hist-results" style="display:none">
+                    <div id="hist-status"></div>
+                    <div id="hist-entries"></div>
+                    <button type="button" class="rs-danger" onclick="HISTORY_UI.deleteHistory()">Delete my saved history</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        /* Footer helpers for the results screen */
+        const RS_UI = (function () {
+            let _opener = null;
+            const modal = () => document.getElementById('hist-modal');
+            function openHistory() {
+                const m = modal(); if (!m) return;
+                _opener = document.activeElement;
+                m.classList.add('is-open');
+                const x = m.querySelector('.rs-modal-x'); if (x) x.focus();
+            }
+            function closeHistory() {
+                const m = modal(); if (!m || !m.classList.contains('is-open')) return;
+                m.classList.remove('is-open');
+                if (_opener && _opener.focus) _opener.focus();
+            }
+            function retake() {
+                if (window.confirm('Take all the tests again? Your current results will be replaced.')) App.retakeTests();
+            }
+            document.addEventListener('keydown', function (e) {
+                const m = modal(); if (!m || !m.classList.contains('is-open')) return;
+                if (e.key === 'Escape') { closeHistory(); return; }
+                if (e.key !== 'Tab') return;                       // keep keyboard focus inside the dialog
+                const f = [...m.querySelectorAll('button, input')].filter(el => !el.disabled && el.offsetParent !== null);
+                if (!f.length) return;
+                const first = f[0], last = f[f.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+            });
+            document.addEventListener('click', function (e) { if (e.target && e.target.id === 'hist-modal') closeHistory(); });
+            const y = document.getElementById('rs-year'); if (y) y.textContent = new Date().getFullYear();
+            return { openHistory, closeHistory, retake };
+        })();
+        window.RS_UI = RS_UI;
+    </script>
+
+    <!-- ══════════════════════════════════════════════════════════
+     WHITEPAPER MODAL
+══════════════════════════════════════════════════════════ -->
+    <div id="wp-modal" style="display:none;position:fixed;inset:0;z-index:990;background:rgba(15,23,42,.55);backdrop-filter:blur(6px);overflow-y:auto;padding:60px 20px 40px;-webkit-overflow-scrolling:touch">
+        <div style="max-width:580px;margin:0 auto;background:#FFFFFF;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.18);overflow:hidden">
+
+            <!-- Header -->
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:24px 28px 0">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <img src="logo.png" alt="OcuScan" style="width:36px;height:36px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">
+                    <span style="font-size:19px;font-weight:700;color:#0F172A;font-family:'DM Sans',sans-serif">What is OcuScan?</span>
+                </div>
+                <button onclick="document.getElementById('wp-modal').style.display='none'" style="background:#F1F5F9;border:none;border-radius:8px;padding:8px 14px;font-size:13px;color:#475569;cursor:pointer;font-family:'DM Sans',sans-serif">✕ Close</button>
+            </div>
+
+            <div style="padding:20px 28px 28px">
+                <div style="font-size:15px;color:#0F172A;font-weight:600;margin-bottom:6px">Your personal eye screening tool — in your pocket.</div>
+                <p style="font-size:14px;color:#475569;line-height:1.75;margin-bottom:22px">OcuScan uses your phone or laptop camera to check how well your eyes are working — without any special equipment, doctor visits, or expensive tests. In just a few minutes, it gives you a clear picture of your vision health.</p>
+
+                <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:22px">
+                    <div style="background:#EBF5FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start">
+                        <span style="font-size:20px;flex-shrink:0">👓</span>
+                        <div>
+                            <div style="font-weight:600;color:#0F172A;margin-bottom:3px;font-size:14px">Do you need glasses?</div>
+                            <div style="font-size:13px;color:#475569;line-height:1.65">OcuScan checks how sharp your vision is at a distance — the same way a doctor would with a standard eye chart, but done right from your screen.</div>
+                        </div>
+                    </div>
+                    <div style="background:#EBF5FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start">
+                        <span style="font-size:20px;flex-shrink:0">📖</span>
+                        <div>
+                            <div style="font-weight:600;color:#0F172A;margin-bottom:3px;font-size:14px">Near vision check</div>
+                            <div style="font-size:13px;color:#475569;line-height:1.65">Checks how well you read up close — useful for spotting reading strain or early presbyopia.</div>
+                        </div>
+                    </div>
+                    <div style="background:#EBF5FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start">
+                        <span style="font-size:20px;flex-shrink:0">🌫</span>
+                        <div>
+                            <div style="font-weight:600;color:#0F172A;margin-bottom:3px;font-size:14px">Contrast sensitivity</div>
+                            <div style="font-size:13px;color:#475569;line-height:1.65">Tests your ability to see low-contrast letters — can catch early signs of eye conditions that a standard chart misses.</div>
+                        </div>
+                    </div>
+                    <div style="background:#EBF5FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start">
+                        <span style="font-size:20px;flex-shrink:0">📄</span>
+                        <div>
+                            <div style="font-weight:600;color:#0F172A;margin-bottom:3px;font-size:14px">Get a real report</div>
+                            <div style="font-size:13px;color:#475569;line-height:1.65">At the end, download a clean PDF report you can show your eye doctor — with your results, estimated power, and personalised advice.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:10px;padding:12px 16px;font-size:12px;color:#92400E;line-height:1.65">
+                    ⚠️ OcuScan is a <strong>screening tool</strong>, not a medical diagnosis. Always see a qualified eye doctor before buying glasses or making any health decisions.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        #eye-gate{position:fixed;inset:0;z-index:9500;display:none;align-items:center;justify-content:center;padding:20px;overflow-y:auto;background:linear-gradient(135deg,var(--surface-2,#F8FAFB) 0%,var(--brand-light,#EBF2FF) 48%,var(--teal-light,#E6F7F5) 100%)}
+        #eye-gate.open{display:flex}
+        .eg-card{width:min(440px,100%);margin:auto;background:var(--surface,#fff);border:1px solid var(--border-color,#E2E8F0);border-radius:24px;padding:30px 26px 24px;text-align:center;box-shadow:0 24px 64px -28px rgba(15,23,42,.28)}
+        #eye-gate.open .eg-card{animation:eg-in .35s cubic-bezier(.2,.8,.2,1)}
+        .eg-eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--brand,#1A56DB)}
+        .eg-eyebrow::before{content:'';width:6px;height:6px;border-radius:99px;background:var(--brand,#1A56DB);box-shadow:0 0 0 4px var(--brand-light,#EBF2FF)}
+        .eg-face{display:block;width:100%;max-width:300px;height:auto;margin:18px auto 6px}
+        .eg-title{margin:8px 0 8px;font-size:28px;line-height:1.15;font-weight:700;letter-spacing:-.01em;color:var(--text-1,#0F172A)}
+        .eg-sub{margin:0 auto 22px;max-width:34ch;font-size:14.5px;line-height:1.6;color:var(--text-2,#475569)}
+        .eg-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:54px;padding:0 20px;border:none;border-radius:14px;background:var(--brand,#1A56DB);color:#fff;font:600 16px 'DM Sans',system-ui,sans-serif;cursor:pointer;box-shadow:0 10px 24px -12px rgba(26,86,219,.7);transition:background .15s,transform .15s}
+        .eg-btn:hover{background:var(--brand-hover,#1347C0)}
+        .eg-btn:active{transform:scale(.98)}
+        .eg-btn:focus-visible{outline:3px solid var(--teal,#0D9E8A);outline-offset:3px}
+        .eg-note{margin:14px 0 0;font-size:12.5px;color:var(--text-3,#94A3B8)}
+        .eg-open,.eg-shut,.eg-ring{display:none}
+        .eg-face[data-closed="left"] #eg-l .eg-shut,.eg-face[data-closed="left"] #eg-l .eg-ring,.eg-face[data-closed="left"] #eg-r .eg-open{display:block}
+        .eg-face[data-closed="right"] #eg-r .eg-shut,.eg-face[data-closed="right"] #eg-r .eg-ring,.eg-face[data-closed="right"] #eg-l .eg-open{display:block}
+        .eg-ring{animation:eg-pulse 1.8s ease-in-out infinite;transform-origin:center}
+        @keyframes eg-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+        @keyframes eg-pulse{0%,100%{opacity:.35}50%{opacity:1}}
+        @media (max-width:480px){.eg-card{padding:26px 20px 20px}.eg-title{font-size:24px}}
+        @media (prefers-reduced-motion:reduce){#eye-gate.open .eg-card,.eg-ring{animation:none}}
+    </style>
+    <div id="eye-gate" role="dialog" aria-modal="true" aria-labelledby="eg-title" aria-hidden="true">
+        <div class="eg-card">
+            <div class="eg-eyebrow" id="eg-eyebrow">Right eye · Visual Acuity</div>
+            <svg class="eg-face" id="eg-face" data-closed="left" viewBox="0 0 240 120" aria-hidden="true">
+                <g id="eg-l" transform="translate(70 62)">
+                    <circle class="eg-ring" r="40" fill="none" stroke="#0D9E8A" stroke-width="2.5" stroke-dasharray="5 6"/>
+                    <g class="eg-open">
+                        <ellipse rx="30" ry="18" fill="#fff" stroke="#0F172A" stroke-width="2.5"/>
+                        <circle r="10.5" fill="#1A56DB"/><circle r="4.4" fill="#0F172A"/><circle cx="-3.5" cy="-3.8" r="2.1" fill="#fff"/>
+                    </g>
+                    <g class="eg-shut" fill="none" stroke="#0F172A" stroke-width="3.5" stroke-linecap="round">
+                        <path d="M-30 -2 Q0 22 30 -2"/>
+                        <path d="M-20 10 L-24 18 M-8 15 L-9 23 M6 15 L8 23 M19 10 L24 18" stroke-width="2.5"/>
+                    </g>
+                    <path d="M-30 -30 Q0 -44 30 -30" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round"/>
+                    <text y="54" text-anchor="middle" font-family="Space Mono,monospace" font-size="9" font-weight="700" letter-spacing="1.5" fill="#94A3B8">YOUR LEFT</text>
+                </g>
+                <g id="eg-r" transform="translate(170 62)">
+                    <circle class="eg-ring" r="40" fill="none" stroke="#0D9E8A" stroke-width="2.5" stroke-dasharray="5 6"/>
+                    <g class="eg-open">
+                        <ellipse rx="30" ry="18" fill="#fff" stroke="#0F172A" stroke-width="2.5"/>
+                        <circle r="10.5" fill="#1A56DB"/><circle r="4.4" fill="#0F172A"/><circle cx="-3.5" cy="-3.8" r="2.1" fill="#fff"/>
+                    </g>
+                    <g class="eg-shut" fill="none" stroke="#0F172A" stroke-width="3.5" stroke-linecap="round">
+                        <path d="M-30 -2 Q0 22 30 -2"/>
+                        <path d="M-20 10 L-24 18 M-8 15 L-9 23 M6 15 L8 23 M19 10 L24 18" stroke-width="2.5"/>
+                    </g>
+                    <path d="M-30 -30 Q0 -44 30 -30" fill="none" stroke="#94A3B8" stroke-width="3" stroke-linecap="round"/>
+                    <text y="54" text-anchor="middle" font-family="Space Mono,monospace" font-size="9" font-weight="700" letter-spacing="1.5" fill="#94A3B8">YOUR RIGHT</text>
+                </g>
+            </svg>
+            <h2 class="eg-title" id="eg-title">Close your left eye</h2>
+            <p class="eg-sub" id="eg-sub">We're about to test your right eye. Gently close your left eye, or cover it with your palm without pressing on it.</p>
+            <button type="button" class="eg-btn" id="eg-btn" onclick="App.eyeGateConfirm()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                <span id="eg-btn-text">I've closed my left eye</span>
+            </button>
+            <p class="eg-note" id="eg-note">Keep your right eye open and look at the screen.</p>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="index.js?v=20261020-2"></script>
+    <!-- ══════════════════════════════════════════════════════════
+     DIOPTER / FAR POINT ENGINE
+══════════════════════════════════════════════════════════ -->
+    <!-- ══════════════════════════════════════════════════════════
+         FEATURE-04: CONTRAST SENSITIVITY SCREEN
+         Decreasing-contrast letter chart — detects early macular
+         degeneration, glaucoma, and cataract better than Snellen alone.
+    ══════════════════════════════════════════════════════════ -->
+    <div class="screen" id="screen-contrast" style="padding-top:68px;background:#080d1a">
+        <div class="screen-inner">
+            <div class="test-header">
+                <div class="test-meta">
+                    <div class="test-name">CONTRAST SENSITIVITY</div>
+                    <div class="test-lvl" id="cs-step-lbl">Row 1 of 6</div>
+                </div>
+                <button class="btn btn-xs btn-outline" onclick="location.href='index.html'">✕ Exit</button>
+            </div>
+
+            <p style="font-size:13px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:16px;font-family:'DM Sans',sans-serif;line-height:1.5">
+                Letters fade with each row. Read as far as you can.<br>Say when you can no longer clearly distinguish letters.
+            </p>
+
+            <!-- Canvas renders the Pelli-Robson style chart -->
+            <div style="display:flex;justify-content:center;margin-bottom:16px">
+                <canvas id="cs-canvas" width="400" height="320"
+                    role="img"
+                    aria-label="Contrast sensitivity chart — letters becoming progressively lighter"
+                    style="max-width:100%;border-radius:8px;background:#FFFFFF"></canvas>
+            </div>
+
+            <p class="test-question" id="cs-question">Can you read the letters in row 1?</p>
+
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:14px">
+                <button class="btn btn-primary" style="min-width:120px;min-height:44px" onclick="CS.answer(true)">✓ Yes, clearly</button>
+                <button class="btn btn-ghost"   style="min-width:120px;min-height:44px" onclick="CS.answer(false)">✕ Too faint</button>
+            </div>
+
+            <div class="instr">
+                <div class="instr-icon">👁</div>
+                <div class="instr-text">Contrast sensitivity detects early signs of <strong>macular degeneration, glaucoma, and cataracts</strong> that Snellen acuity may miss. Keep your normal viewing distance.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="screen" id="screen-diopter" style="padding-top:68px">
+        <div class="screen-inner">
+            <div class="test-header">
+                <div class="test-meta">
+                    <div class="test-name">FAR POINT — <span id="diop-eye-label" style="color:var(--amber)">RIGHT EYE (OD)</span></div>
+                    <div class="test-lvl" id="diop-phase-label">Phase 1 of 2</div>
+                </div>
+                <button class="btn btn-xs btn-outline" onclick="location.href='index.html'">✕ Exit</button>
+            </div>
+            <div class="eye-cover-reminder" id="diop-eye-reminder">
+                🤚 <span id="diop-reminder-text">Cover your LEFT eye.</span>
+            </div>
+
+            <div class="diop-phase" id="diop-phase-title">PHASE 1 — MYOPIA TEST</div>
+
+            <div class="diop-stage" id="diop-stage">
+                <canvas id="diop-canvas" width="280" height="150"></canvas>
+            </div>
+
+            <!-- Distance bar -->
+            <div class="diop-dist-label">Distance: <span id="diop-dist-val">— cm</span></div>
+            <div class="diop-dist-bar">
+                <div class="diop-dist-fill" id="diop-dist-fill" style="width:0%"></div>
+            </div>
+
+            <p class="test-question" id="diop-instruction">Move screen slowly AWAY from your face until the pattern blurs.</p>
+
+            <button class="btn btn-cyan" style="width:100%;margin:10px 0" id="diop-blur-btn" onclick="App.diopterBlurNow()">
+                🔵 It's Blurring Now
+            </button>
+            <button class="btn btn-outline btn-sm" style="width:100%;margin-bottom:8px" onclick="App.diopterCantBlur()">
+                Pattern stays clear (no blur found)
+            </button>
+
+            <!-- Result shown after both phases -->
+            <div class="diop-result-box" id="diop-result-box" style="display:none">
+                <div class="diop-power-label">ESTIMATED PRESCRIPTION</div>
+                <div class="diop-power" id="diop-power-val">—</div>
+                <div class="diop-power-label">Diopters (D)</div>
+                <div class="diop-category" id="diop-category">—</div>
+                <div style="font-size:11px;color:var(--white-dim);margin-top:8px" id="diop-note"></div>
+            </div>
+
+            <div class="instr">
+                <div class="instr-icon">🔭</div>
+                <div class="instr-text" id="diop-physics-note">
+                    <strong>Physics:</strong> The far point is where your relaxed eye focuses. Power = −100 ÷ distance(cm). At 50 cm → −2.00D myopia. At 25 cm → −4.00D.
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- RESEARCH MODE -->
+    <div class="research-badge" id="research-badge" onclick="App.openResearch()">RESEARCH MODE ACTIVE</div>
+    <div class="research-modal" id="research-modal">
+        <div class="research-inner">
+            <h3>⚗ RESEARCH MODE — RAW DATA EXPORT</h3>
+            <p>All landmark distances, calibration values, and test answers. Anonymised. For validation studies only.</p>
+            <table class="research-table" id="research-table">
+                <thead>
+                    <tr>
+                        <th>PARAMETER</th>
+                        <th>VALUE</th>
+                        <th>UNIT</th>
+                    </tr>
+                </thead>
+                <tbody id="research-tbody"></tbody>
+            </table>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-cyan btn-sm" onclick="App.exportCSV()">⬇ Download CSV</button>
+                <button class="btn btn-outline btn-sm" onclick="App.closeResearch()">Close</button>
+            </div>
+        </div>
+    </div>
+    <!-- ENV GUARD -->
+    <div class="env-modal" id="env-modal">
+        <div class="env-inner">
+            <h3>⚙ PRE-TEST ENVIRONMENT CHECK</h3>
+            <p>Accurate results require optimal conditions. Review the checks below before proceeding.</p>
+            <div class="env-checks" id="env-checks"></div>
+            <div class="env-btns">
+                <button class="btn btn-cyan btn-sm" id="env-proceed-btn" onclick="ENV.proceed()">Proceed Anyway</button>
+                <button class="btn btn-outline btn-sm" onclick="ENV.cancel()">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <!-- CONSENT SCREEN — shown every session -->
+    <div id="consent-screen" style="position:fixed;inset:0;z-index:10000;background:#FAFBFC;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:env(safe-area-inset-top,20px) 24px env(safe-area-inset-bottom,40px);overflow-y:auto">
+        <div style="max-width:520px;width:100%;display:flex;flex-direction:column;align-items:center;gap:0">
+            <!-- Logo -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:36px">
+                <div style="width:36px;height:36px;border-radius:10px;background:#1A56DB;display:flex;align-items:center;justify-content:center;font-size:18px;">👁</div>
+                <span style="font-family:'DM Sans',sans-serif;font-size:18px;font-weight:700;color:#0F172A;letter-spacing:-.01em">OcuScan <span style="font-weight:400;color:#94A3B8">Pro</span></span>
+            </div>
+            <!-- Heading -->
+            <h1 style="font-family:'DM Sans',sans-serif;font-size:clamp(22px,5vw,30px);font-weight:700;color:#0F172A;text-align:center;line-height:1.2;margin-bottom:28px">Please read and agree<br>before you start.</h1>
+            <!-- Plain consent paragraph -->
+            <div style="width:100%;background:#FFFFFF;border:1px solid #E2E8F0;border-radius:16px;padding:20px 22px;margin-bottom:28px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
+                <p style="font-size:15px;color:#334155;line-height:1.8;font-family:'DM Sans',sans-serif;margin:0">
+                    OcuScan Pro is an <strong style="color:#0F172A">educational screening tool</strong> — it is <strong style="color:#0F172A">not a medical device</strong> and does not replace a professional eye examination by a qualified optometrist or ophthalmologist. Do not make clinical decisions based on these results.<br><br>
+                    By tapping <em>I Agree &amp; Continue</em> you confirm that: you are 13 years or older (or have parental consent); camera access is used solely for real-time distance measurement and no video is recorded or stored; and you consent to anonymised screening scores being processed to generate your report, retained up to 2 years under India's DPDP Act 2023 and GDPR principles. Request deletion any time at <a href="mailto:ocuscan1@gmail.com" style="color:#1A56DB;text-underline-offset:3px">ocuscan1@gmail.com</a>.<br><br>
+                    <span style="font-size:13px;color:#94A3B8">OcuScan Pro · Surya Productions · Liability is disclaimed for any indirect, incidental, or consequential harm arising from use of this screening tool.</span>
+                </p>
+            </div>
+            <!-- Single I Agree button -->
+            <button id="consent-proceed" onclick="(window.CONSENT||{proceed:function(){var s=document.getElementById('consent-screen');if(s){s.style.transition='opacity .4s';s.style.opacity='0';setTimeout(function(){s.style.display='none'},420)}}}).proceed()" style="width:100%;max-width:400px;padding:18px 32px;border-radius:14px;border:none;background:#1A56DB;color:#fff;font-family:'DM Sans',sans-serif;font-size:17px;font-weight:700;cursor:pointer;transition:background .2s,transform .15s,box-shadow .2s;box-shadow:0 4px 16px rgba(26,86,219,.3);letter-spacing:.01em" onmouseover="this.style.background='#1347C0';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='#1A56DB';this.style.transform='translateY(0)'">
+                I Agree &amp; Continue →
+            </button>
+            <p style="margin-top:16px;font-size:12px;color:#94A3B8;text-align:center;font-family:'DM Sans',sans-serif">By continuing you agree to all terms above. · <a href="privacy.html" target="_blank" style="color:#1A56DB;text-decoration:none;text-underline-offset:3px" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">Privacy Policy</a></p>
+        </div>
+    </div>
+    <!-- PWA INSTALL BAR -->
+    <div class="install-bar" id="install-bar">
+        <div style="font-size:24px">📲</div>
+        <div class="install-bar-text">
+            <div class="install-bar-title">Install OcuScan Pro</div>
+            <div class="install-bar-sub">Add to home screen for offline access</div>
+        </div>
+        <div class="install-bar-btns">
+            <button class="btn btn-cyan btn-sm" id="install-btn" onclick="PWA.install()">Install</button>
+            <button class="btn btn-outline btn-sm" onclick="PWA.dismiss()">✕</button>
+        </div>
+    </div>
+    <!-- CAMERA PERMISSION MODAL -->
+    <div id="cam-perm-modal" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,.65);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);align-items:center;justify-content:center;padding:20px;">
+        <div id="cam-perm-inner" style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:24px;padding:36px 28px;max-width:380px;width:100%;text-align:center;box-shadow:0 12px 48px rgba(0,0,0,.16),0 4px 16px rgba(0,0,0,.08);">
+            <!-- Icon -->
+            <div style="width:72px;height:72px;border-radius:18px;background:#EBF2FF;border:1.5px solid rgba(26,86,219,.2);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:34px;">📷</div>
+            <div style="font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;letter-spacing:.1em;color:#1A56DB;margin-bottom:10px;text-transform:uppercase;">Camera Access</div>
+            <h2 style="font-family:'DM Sans',sans-serif;font-size:22px;font-weight:700;color:#0F172A;margin-bottom:12px;line-height:1.25;">Enable Distance Tracking</h2>
+            <p style="font-size:14px;color:#475569;line-height:1.7;margin-bottom:8px;font-family:'DM Sans',sans-serif;">Your camera is used <strong style="color:#0F172A">only</strong> to measure the distance between your iris landmarks — no video is recorded or uploaded.</p>
+            <div style="background:#F8FAFB;border:1px solid #E2E8F0;border-radius:12px;padding:14px;margin:16px 0;text-align:left;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;color:#475569;font-family:'DM Sans',sans-serif"><span style="font-size:16px">📏</span> Real-time distance measurement</div>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;color:#475569;font-family:'DM Sans',sans-serif"><span style="font-size:16px">🔒</span> 100% local — no data leaves device</div>
+                <div style="display:flex;align-items:center;gap:10px;font-size:13px;color:#475569;font-family:'DM Sans',sans-serif"><span style="font-size:16px">👁</span> Accurate Snellen letter sizing</div>
+            </div>
+            <button onclick="_hideCamModal(true)" style="width:100%;padding:15px;background:#1A56DB;color:#fff;font-weight:700;font-size:15px;border:none;border-radius:12px;cursor:pointer;margin-bottom:10px;letter-spacing:.01em;box-shadow:0 4px 16px rgba(26,86,219,.35);transition:all .2s;font-family:'DM Sans',sans-serif;min-height:44px" onmouseover="this.style.background='#1347C0';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='#1A56DB';this.style.transform=''">
+                📷 Allow Camera Access
+            </button>
+            <button onclick="_hideCamModal(false);App.skipCamera()" style="width:100%;padding:12px;background:transparent;border:1px solid #E2E8F0;color:#475569;font-size:14px;border-radius:12px;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif;min-height:44px" onmouseover="this.style.borderColor='#1A56DB';this.style.color='#1A56DB'" onmouseout="this.style.borderColor='#E2E8F0';this.style.color='#475569'">
+                Skip — I'll enter distance manually
+            </button>
+        </div>
+    </div>
+
+    <!-- GESTURE ALERT SYSTEM -->
+    <div id="gesture-alert" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="ga-icon-wrap">
+            <span class="ga-emoji" id="ga-emoji" aria-hidden="true">👁</span>
+        </div>
+        <div class="ga-body">
+            <div class="ga-title" id="ga-title">Cover Your Eye</div>
+            <div class="ga-msg"  id="ga-msg">Place your hand over your eye.</div>
+            <div class="ga-sub"  id="ga-sub"></div>
+        </div>
+        <button class="ga-dismiss" id="ga-dismiss" onclick="GESTUREALERT.dismiss()" aria-label="Dismiss this message" style="min-width:44px;min-height:44px;background:none;border:none;cursor:pointer;color:inherit;display:flex;align-items:center;justify-content:center;">✕</button>
+        <div class="ga-progress" id="ga-progress"></div>
+    </div>
+
+    
+    <!-- EYE COVER REMINDER (replaces alarming "Protocol Violation" overlay) -->
+    <div class="pv-overlay" id="pv-overlay" role="alert" aria-live="polite">
+        <div class="pv-box">
+            <div style="font-size:48px;line-height:1;margin-bottom:12px;display:inline-block;animation:pv-hand 1.1s ease-in-out infinite;">🤚</div>
+            <div class="pv-title" id="pv-title-text">Cover Your Eye</div>
+            <div class="pv-sub">Both eyes are open.<br>Please cover <strong id="pv-eye-name">your left eye</strong> to continue.</div>
+            <svg width="48" height="48" style="margin:12px auto;display:block;transform:rotate(-90deg)">
+                <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,184,48,.15)" stroke-width="3"/>
+                <circle cx="24" cy="24" r="20" fill="none" stroke="var(--amber)" stroke-width="3"
+                    stroke-dasharray="125.7"
+                    style="animation:pv-ring-fill 1.8s linear infinite;opacity:.7"/>
+            </svg>
+            <div class="pv-blink" id="pv-blink-status">Blinks: 0</div>
+        </div>
+    </div>
+
+    <script>
+    // NAV DRAWER (mobile hamburger)
+    const NAV_MENU = {
+        open(){const d=document.getElementById('nav-drawer');if(d){d.classList.add('open');document.body.style.overflow='hidden'}},
+        close(){const d=document.getElementById('nav-drawer');if(d){d.classList.remove('open');document.body.style.overflow=''}},
+        toggle(){const d=document.getElementById('nav-drawer');if(d&&d.classList.contains('open'))this.close();else this.open()},
+    };
+    window.NAV_MENU=NAV_MENU;
+
+    /* ══ B1/B2/B3 — PRETEST MODAL CONTROLLER ═════════════════ */
+    const PRETEST = {
+        _pending: null,
+        show(testName) {
+            const m = document.getElementById('pretest-'+testName);
+            if (!m) {
+                // No per-test modal — start directly via real startTest (not the intercepted version)
+                if (App._realStartTest) App._realStartTest(testName);
+                else App.startTest(testName);
+                return;
+            }
+            this._pending = testName;
+            m.classList.add('open');
+        },
+        go(testName) {
+            const m = document.getElementById('pretest-'+testName);
+            if (m) m.classList.remove('open');
+            this._pending = null;
+            if (App._realStartTest) App._realStartTest(testName);
+            else App.startTest(testName);
+        }
+    };
+    window.PRETEST = PRETEST;
+
+    // NOTE: intercept removed — no per-test pretest HTML modals exist.
+    // App.startTest calls the real startTest directly.
+
+    /* ══ D1 — PROGRESS STEPPER ═══════════════════════════════ */
+    (function(){
+        const TESTS = ['snellen','near','contrast','diopter'];
+        const LABELS = {'snellen':'Acuity','near':'Near','contrast':'Contrast','diopter':'Diopter'};
+        const strip = document.createElement('div');
+        strip.id = 'test-stepper';
+        strip.style.cssText = 'display:none;position:fixed;top:72px;left:0;right:0;z-index:850;background:rgba(2,8,20,.95);border-bottom:1px solid rgba(0,212,255,.12);padding:6px 16px;display:none;align-items:center;justify-content:center;gap:6px';
+        TESTS.forEach((t,i) => {
+            const dot = document.createElement('div');
+            dot.id = 'stepper-'+t;
+            dot.title = LABELS[t];
+            dot.style.cssText = 'width:28px;height:6px;border-radius:3px;background:rgba(255,255,255,.12);transition:background .3s;cursor:pointer;position:relative';
+            dot.onclick = () => { /* tooltip on tap */ };
+            strip.appendChild(dot);
+        });
+        document.body.appendChild(strip);
+
+        window._updateStepper = function(activeTest) {
+            const completed = window.App && App._S ? App._S.completed || {} : {};
+            if (!activeTest) { strip.style.display='none'; return; }
+            strip.style.display='flex';
+            TESTS.forEach(t => {
+                const d = document.getElementById('stepper-'+t);
+                if (!d) return;
+                if (t === activeTest) d.style.background = 'var(--cyan)';
+                else if (completed[t]) d.style.background = 'var(--green)';
+                else d.style.background = 'rgba(255,255,255,.14)';
+            });
+        };
+    })();
+
+    /* ══ D2 — BACK NAVIGATION GUARD ══════════════════════════ */
+    (function(){
+        // BUG-04 fix: only push initial state once; guard popstate to avoid Safari infinite loop
+        if (!history.state?.ocu) history.pushState({ocu:true},'','');
+        window.addEventListener('popstate', function(e) {
+            // Safari may fire popstate for our own pushState — ignore if state is already ours
+            if (e.state?.ocu) return;
+            const testScreens = ['snellen','near','diopter','contrast'];
+            const active = document.querySelector('.screen.active');
+            if (!active) return;
+            const scr = active.id.replace('screen-','');
+            if (testScreens.includes(scr)) {
+                // Re-push our sentinel ONCE to keep URL clean
+                history.pushState({ocu:true},'','');
+                // Show back guard modal
+                let modal = document.getElementById('back-guard-modal');
+                if (!modal) {
+                    modal = document.createElement('div');
+                    modal.id = 'back-guard-modal';
+                    modal.setAttribute('role','dialog');
+                    modal.setAttribute('aria-modal','true');
+                    modal.setAttribute('aria-labelledby','bgm-title');
+                    modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:7000;background:rgba(0,0,0,.72);align-items:center;justify-content:center;padding:24px';
+                    modal.innerHTML = `<div style="background:#0d1a30;border:1px solid rgba(0,212,255,.2);border-radius:20px;padding:32px 28px;max-width:360px;width:100%;text-align:center">
+                        <div style="font-size:32px;margin-bottom:12px">⚠️</div>
+                        <div id="bgm-title" style="font-size:18px;font-weight:700;color:#eef3ff;margin-bottom:10px">Leave this test?</div>
+                        <div style="font-size:14px;color:#7a8fb8;margin-bottom:24px;line-height:1.6">Your progress will be lost — you'll need to start the screening over.</div>
+                        <div style="display:flex;flex-direction:column;gap:10px">
+                            <button onclick="document.getElementById('back-guard-modal').style.display='none'" style="padding:14px;border-radius:10px;background:#0a6ef5;color:#fff;border:none;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;min-height:44px">Continue Test</button>
+                            <button onclick="location.href='index.html'" style="padding:14px;border-radius:10px;background:none;color:#7a8fb8;border:1px solid rgba(255,255,255,.12);font-size:15px;cursor:pointer;font-family:'DM Sans',sans-serif;min-height:44px">Leave Screening</button>
+                        </div>
+                    </div>`;
+                    document.body.appendChild(modal);
+                }
+                modal.style.display='flex';
+                // Focus first button for keyboard/screen reader users
+                setTimeout(()=>{const b=modal.querySelector('button');if(b)b.focus();},50);
+            }
+        });
+    })();
+
+    /* ══ D6 — EYE LABELS: upgrade OD/OS → plain language ═════ */
+    (function(){
+        // Patch nav-eye-pill text after it's set
+        const origSet = window.App && App.updateEyePill;
+        function patchPill(){
+            const p = document.getElementById('nav-eye-pill');
+            if (!p) return;
+            const obs = new MutationObserver(() => {
+                if (p.textContent === 'RIGHT EYE') p.textContent = 'Right Eye (OD)';
+                if (p.textContent === 'LEFT EYE')  p.textContent = 'Left Eye (OS)';
+            });
+            obs.observe(p, {childList:true,characterData:true,subtree:true});
+        }
+        document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', patchPill) : patchPill();
+    })();
+
+    </script>
+
+    <!-- ══════════════════════════════════════════════════════════
+         ENG-12: Service Worker registration
+    ══════════════════════════════════════════════════════════ -->
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+                .then(reg => console.log('[SW] Registered, scope:', reg.scope))
+                .catch(e  => console.warn('[SW] Registration failed:', e));
+        });
+    }
+    </script>
+
+    <!-- ══════════════════════════════════════════════════════════
+         ANIM-02/03/04: GSAP screen transitions + letter reveal
+    ══════════════════════════════════════════════════════════ -->
+    <script>
+    (function() {
+        if (typeof gsap === 'undefined') return;
+
+        // ANIM-02: Override showScreen to use contextual GSAP transitions
+        const _origShowScreen = window.App && App.showScreen;
+        const _transitionMap  = {
+            // name → [from-screen-anim, to-screen-anim]
+            snellen:  { x: -24, opacity: 0 },
+            near:     { x: -24, opacity: 0 },
+            diopter:  { x: -24, opacity: 0 },
+            results:  { y:  20, opacity: 0 },
+            menu:     { x:  24, opacity: 0 },
+            calib:    { y: -16, opacity: 0 },
+        };
+
+        // Intercept every screen activation and animate in the incoming screen
+        const observer = new MutationObserver(mutations => {
+            for (const m of mutations) {
+                if (m.type === 'attributes' && m.attributeName === 'class') {
+                    const el = m.target;
+                    if (el.classList.contains('active') && el.id.startsWith('screen-')) {
+                        const name = el.id.replace('screen-', '');
+                        const from = _transitionMap[name] || { opacity: 0 };
+                        // Only animate if reduced motion is not preferred
+                        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                            gsap.fromTo(el,
+                                { ...from, opacity: 0 },
+                                { x: 0, y: 0, opacity: 1, duration: 0.38, ease: 'power2.out', clearProps: 'x,y,opacity' } /* FIX: leaving inline opacity:1 kept every visited screen painted */
+                            );
+                        }
+                    }
+                }
+            }
+        });
+        document.querySelectorAll('.screen').forEach(s =>
+            observer.observe(s, { attributes: true })
+        );
+
+        // ANIM-03: Snellen letter blur-to-sharp reveal
+        // Called by the Snellen test renderer when a new letter appears
+        window._animSnellenLetter = function(el) {
+            if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            gsap.fromTo(el,
+                { filter: 'blur(12px)', scale: 0.94, opacity: 0.4 },
+                { filter: 'blur(0px)',  scale: 1,    opacity: 1,
+                  duration: 0.28, ease: 'power2.out', clearProps: 'filter,scale,opacity' }
+            );
+        };
+
+        // ANIM-04: Results scorecard stagger — re-run on every results render
+        window._animResults = function() {
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            // One orchestrated reveal: the two power boxes rise in. Inline styles are cleared afterwards.
+            gsap.from('.rs-box, .rs-score', { opacity:0, y:34, duration:.7, stagger:.14, ease:'power3.out', clearProps:'opacity,transform' });
+        };
+
+    })();
+    </script>
+
+    <!-- ══════════════════════════════════════════════════════════
+         FEATURE-03/07 + SCI-07: Pre-test questionnaire modal
+         Shown once per session after setup, before menu.
+    ══════════════════════════════════════════════════════════ -->
+    <!-- "Prepare your screen" modal — golden-ratio type scale (12 · 19 · 31,
+         same ladder as the calibration screen) and a single instructional
+         sentence instead of a checklist, per the redesign brief. -->
+    <div id="pretest-questionnaire" style="display:none;position:fixed;inset:0;z-index:3500;background:rgba(15,23,42,.72);backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:20px" role="dialog" aria-modal="true" aria-labelledby="ptq-title">
+        <div style="background:#FFFFFF;border:1px solid #E2E8F0;border-radius:22px;padding:40px 32px;max-width:420px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.14);text-align:center">
+            <div id="ptq-page-2">
+                <div style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.24em;color:#1A56DB;text-transform:uppercase;margin-bottom:12px">Before You Begin</div>
+                <h2 id="ptq-title" style="font-family:'DM Sans',sans-serif;font-size:31px;line-height:1.15;font-weight:700;color:#0F172A;letter-spacing:-.01em;margin-bottom:19px">Get your space ready.</h2>
+                <p style="font-family:'DM Sans',sans-serif;font-size:16px;line-height:1.6;color:#475569;margin-bottom:31px">Turn your brightness up, dim the room, and sit about 50–70&nbsp;cm from the screen.</p>
+                <button onclick="PTQ.finish()" style="width:100%;padding:16px;background:#1A56DB;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;min-height:52px">I'm Ready</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // PTQ — now fires once before the very first test instead of at the menu
+    const PTQ = (function() {
+        return {
+            open() {
+                document.getElementById('pretest-questionnaire').style.display = 'flex';
+            },
+            finish() {
+                document.getElementById('pretest-questionnaire').style.display = 'none';
+                if (window.App && App.startTest) App.startTest('snellen');
+            }
+        };
+    })();
+    window.PTQ = PTQ;
+    </script>
+
+    <!-- ══════════════════════════════════════════════════════════
+         FEATURE-01: Longitudinal History UI controller
+    ══════════════════════════════════════════════════════════ -->
+    <script>
+    const HISTORY_UI = (function() {
+        let _expanded = false;
+        let _currentPhrase = null;
+
+        function _api() { return (window.App && App._apiBase) || ''; }
+        function _sid() { return window.App && App._sid; }
+        function _tok() { return window.App && App._tok; }
+
+        function toggle() {
+            _expanded = !_expanded;
+            const body    = document.getElementById('history-body');
+            const chevron = document.getElementById('history-chevron');
+            const toggle  = document.getElementById('history-toggle');
+            if (body)    body.style.display  = _expanded ? 'block' : 'none';
+            if (chevron) chevron.style.transform = _expanded ? 'rotate(90deg)' : 'rotate(0deg)';
+            if (toggle)  toggle.setAttribute('aria-expanded', _expanded);
+        }
+
+        async function save() {
+            const input = document.getElementById('hist-passphrase');
+            const phrase = input?.value?.trim();
+            if (!phrase || phrase.length < 4) { alert('Please enter a passphrase of at least 4 characters.'); return; }
+            try {
+                const res = await fetch(_api() + '/api/history/save', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ sessionId: _sid(), token: _tok(), passphrase: phrase }),
+                });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.error);
+                _currentPhrase = phrase;
+                const status = document.getElementById('hist-status');
+                if (status) status.textContent = `✓ Saved! You have ${data.entryCount} entry${data.entryCount===1?'':'s'} in your history.`;
+                const results = document.getElementById('hist-results');
+                if (results) results.style.display = 'block';
+                // Auto-load after saving
+                await _loadEntries(phrase);
+            } catch(e) { alert('Could not save: ' + e.message); }
+        }
+
+        async function load() {
+            const input = document.getElementById('hist-load-phrase');
+            const phrase = input?.value?.trim();
+            if (!phrase || phrase.length < 4) { alert('Enter your passphrase to load history.'); return; }
+            _currentPhrase = phrase;
+            const results = document.getElementById('hist-results');
+            if (results) results.style.display = 'block';
+            await _loadEntries(phrase);
+        }
+
+        async function _loadEntries(phrase) {
+            const status  = document.getElementById('hist-status');
+            const entries = document.getElementById('hist-entries');
+            if (status)  status.textContent  = 'Loading…';
+            if (entries) entries.innerHTML   = '';
+            try {
+                const res = await fetch(_api() + '/api/history/load', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ passphrase: phrase }),
+                });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.error);
+                if (data.entries.length === 0) {
+                    if (status) status.textContent = 'No history found for this passphrase.';
+                    return;
+                }
+                if (status) status.textContent = `${data.entries.length} screening${data.entries.length===1?'':'s'} found:`;
+                _renderEntries(data.entries);
+            } catch(e) {
+                if (status) status.textContent = 'Error: ' + e.message;
+            }
+        }
+
+        function _renderEntries(entries) {
+            const container = document.getElementById('hist-entries');
+            if (!container) return;
+            container.innerHTML = '';
+
+            // Sparkline chart (OHI over time) — simple SVG
+            if (entries.length >= 2) {
+                const scores = entries.map(e => e.ohiScore ?? 50).reverse(); // oldest → newest
+                const W=280,H=60,pad=8;
+                const minS=Math.max(0,Math.min(...scores)-10), maxS=Math.min(100,Math.max(...scores)+10);
+                const pts = scores.map((s,i)=>{
+                    const x=pad+(i/(scores.length-1))*(W-pad*2);
+                    const y=H-pad-((s-minS)/(maxS-minS||1))*(H-pad*2);
+                    return `${x},${y}`;
+                }).join(' ');
+                const lastS=scores[scores.length-1];
+                const lx=pad+((scores.length-1)/(scores.length-1))*(W-pad*2);
+                const ly=H-pad-((lastS-minS)/(maxS-minS||1))*(H-pad*2);
+                const chart=document.createElement('div');
+                chart.style.cssText='margin-bottom:14px;background:#F8FAFB;border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px';
+                chart.innerHTML=`<div style="font-size:11px;font-weight:600;color:#64748B;font-family:'DM Sans',sans-serif;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">OHI Over Time</div>
+                <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:60px">
+                    <polyline points="${pts}" fill="none" stroke="#1A56DB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="${lx}" cy="${ly}" r="4" fill="#1A56DB"/>
+                    <text x="${lx}" y="${ly-8}" text-anchor="middle" font-size="10" fill="#1A56DB" font-family="Space Mono,monospace">${lastS}</text>
+                </svg>`;
+                container.appendChild(chart);
+            }
+
+            entries.forEach((e, i) => {
+                const date = new Date(e.date).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+                const ohi  = e.ohiScore != null ? e.ohiScore : '—';
+                const snOD = e.snellenOD || '—';
+                const snOS = e.snellenOS || '—';
+                const col  = e.ohiScore >= 80 ? '#059669' : e.ohiScore >= 60 ? '#D97706' : '#DC2626';
+                const card = document.createElement('div');
+                card.style.cssText = `padding:12px 14px;background:${i===0?'#F0FDF4':'#F8FAFB'};border:1px solid ${i===0?'rgba(5,150,105,.2)':'#E2E8F0'};border-radius:12px;display:flex;align-items:center;gap:12px`;
+                card.innerHTML = `
+                    <div style="min-width:44px;height:44px;border-radius:50%;background:${col}18;border:1.5px solid ${col}40;display:flex;align-items:center;justify-content:center">
+                        <span style="font-size:13px;font-weight:700;color:${col};font-family:'Space Mono',monospace">${ohi}</span>
+                    </div>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-size:13px;font-weight:600;color:#0F172A;font-family:'DM Sans',sans-serif">${date}${i===0?' <span style="font-size:10px;background:#ECFDF5;color:#059669;padding:2px 7px;border-radius:99px;margin-left:6px;font-weight:600">Latest</span>':''}</div>
+                        <div style="font-size:12px;color:#64748B;margin-top:2px;font-family:'DM Sans',sans-serif">OD: ${snOD} &nbsp;·&nbsp; OS: ${snOS}${e.glasses?' &nbsp;·&nbsp; '+_glassesLabel(e.glasses):''}</div>
+                    </div>
+                    <div style="font-size:11px;color:#94A3B8;font-family:'Space Mono',monospace;white-space:nowrap">OHI ${ohi}</div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function _glassesLabel(g) {
+            return g === 'yes' ? '👓 Glasses' : g === 'contacts' ? '💧 Contacts' : '👁 Unaided';
+        }
+
+        async function deleteHistory() {
+            if (!_currentPhrase) { alert('Load your history first.'); return; }
+            if (!confirm('Delete ALL history for this passphrase? This cannot be undone.')) return;
+            try {
+                const res = await fetch(_api() + '/api/history/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ passphrase: _currentPhrase }),
+                });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.error);
+                const entries = document.getElementById('hist-entries');
+                const status  = document.getElementById('hist-status');
+                if (entries) entries.innerHTML = '';
+                if (status)  status.textContent = '✓ History deleted.';
+                _currentPhrase = null;
+            } catch(e) { alert('Error: ' + e.message); }
+        }
+
+        return { toggle, save, load, deleteHistory };
+    })();
+    window.HISTORY_UI = HISTORY_UI;
+    </script>
+
+    <!-- SCI-06: Iris diameter override mini-modal -->
+    <div id="iris-modal" style="display:none;position:fixed;inset:0;z-index:3200;background:rgba(15,23,42,.7);align-items:center;justify-content:center;padding:20px">
+        <div style="background:#fff;border-radius:18px;padding:24px;max-width:340px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.14)">
+            <h3 style="font-family:'DM Sans',sans-serif;font-size:17px;font-weight:700;color:#0F172A;margin-bottom:6px">Set your iris diameter</h3>
+            <p style="font-size:13px;color:#64748B;font-family:'DM Sans',sans-serif;margin-bottom:14px;line-height:1.6">Contact lens prescriptions sometimes list iris/corneal diameter (typically 11.0–13.0 mm). Setting this reduces Snellen distance error from ±11% to near zero.</p>
+            <label style="font-size:12px;font-weight:600;color:#64748B;font-family:'DM Sans',sans-serif;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px">Iris diameter (mm)</label>
+            <input id="iris-input" type="number" min="10" max="14" step="0.1" value="11.7" style="width:100%;padding:12px 14px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:16px;font-family:'DM Sans',sans-serif;margin-bottom:14px;outline:none" onfocus="this.style.borderColor='#1A56DB'" onblur="this.style.borderColor='#E2E8F0'">
+            <div style="display:flex;gap:10px">
+                <button onclick="IRIS_UI.save()" style="flex:1;padding:12px;background:#1A56DB;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;min-height:44px">Save & Apply</button>
+                <button onclick="IRIS_UI.close()" style="flex:1;padding:12px;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:10px;font-size:14px;color:#64748B;cursor:pointer;font-family:'DM Sans',sans-serif;min-height:44px">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <script>
+    const IRIS_UI = {
+        open() {
+            const v = parseFloat(localStorage.getItem('ocu_iris_mm') || '11.7');
+            const inp = document.getElementById('iris-input');
+            if (inp) inp.value = v;
+            document.getElementById('iris-modal').style.display = 'flex';
+        },
+        close() { document.getElementById('iris-modal').style.display = 'none'; },
+        save() {
+            const v = parseFloat(document.getElementById('iris-input')?.value || '11.7');
+            if (v < 10 || v > 14) { alert('Please enter a value between 10.0 and 14.0 mm'); return; }
+            localStorage.setItem('ocu_iris_mm', v.toFixed(1));
+            this.close();
+            // Update display and reload page to apply new constant
+            if (confirm(`Iris set to ${v.toFixed(1)} mm. Page will reload to apply change.`)) location.reload();
+        }
+    };
+    window.IRIS_UI = IRIS_UI;
+    </script>
+
+</body>
+</html>

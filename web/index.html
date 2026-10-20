@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OcuScan Pro — Know Your Vision, Precisely</title>
+<meta name="description" content="A free, camera-guided vision screening — visual acuity, contrast sensitivity, near vision, and refractive estimate — done from your own screen in about six minutes. No equipment, no appointment.">
+<meta name="theme-color" content="#00D4FF">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%2308131C'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%2300D4FF'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          paper:      '#EEF7F8',
+          ink:        '#08131C',
+          mist:       '#4B5C66',
+          accent:     '#00D4FF',
+          accentdim:  '#00A7C7',
+          deep:       '#013B42',
+          charcoal:   '#17191C',
+          charcoal2:  '#1F2226',
+        },
+        fontFamily: {
+          display: ['"Space Grotesk"', 'sans-serif'],
+          body:    ['"DM Sans"', 'sans-serif'],
+          mono:    ['"Space Mono"', 'monospace'],
+        },
+        boxShadow: {
+          glow:   '0 0 50px -12px rgba(0,212,255,.55)',
+          softxl: '0 30px 70px -25px rgba(8,19,28,.28)',
+        },
+      }
+    }
+  }
+</script>
+
+<style>
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;scroll-padding-top:100px}
+  body{background:#EEF7F8;overflow-x:hidden}
+  ::selection{background:#00D4FF;color:#08131C}
+  ::-webkit-scrollbar{width:10px}
+  ::-webkit-scrollbar-track{background:#EEF7F8}
+  ::-webkit-scrollbar-thumb{background:#BFE1E6;border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#9BCDD5}
+  :focus-visible{outline:2px solid #00D4FF;outline-offset:3px;border-radius:6px}
+
+  .text-gradient{
+    background:linear-gradient(90deg,#013B42,#00A7C7 55%,#00D4FF);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+
+  .eyebrow{display:inline-flex;align-items:center;gap:.55rem;font-family:'Space Mono',monospace;font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;color:#013B42;font-weight:700}
+  .eyebrow::before{content:'';width:6px;height:6px;border-radius:9999px;background:#00D4FF;box-shadow:0 0 0 4px rgba(0,212,255,.16)}
+
+  .nav-glass{background:rgba(238,247,248,.72);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%)}
+  #nav-inner.nav-scrolled{background:rgba(238,247,248,.94);box-shadow:0 10px 40px -16px rgba(8,19,28,.28)}
+
+  .reveal{opacity:0;transform:translateY(28px);transition:opacity .9s cubic-bezier(.16,1,.3,1),transform .9s cubic-bezier(.16,1,.3,1)}
+  .reveal.in-view{opacity:1;transform:none}
+  .reveal-group>*:nth-child(1){transition-delay:0ms}
+  .reveal-group>*:nth-child(2){transition-delay:100ms}
+  .reveal-group>*:nth-child(3){transition-delay:200ms}
+  .reveal-group>*:nth-child(4){transition-delay:300ms}
+  .reveal-group>*:nth-child(5){transition-delay:400ms}
+  .reveal-group>*:nth-child(6){transition-delay:500ms}
+
+  @keyframes drift{
+    0%,100%{transform:translate(0,0) rotate(0deg)}
+    25%{transform:translate(var(--dx,10px),calc(var(--dy,10px) * -1)) rotate(3deg)}
+    50%{transform:translate(calc(var(--dx,10px) * -0.6),var(--dy,10px)) rotate(-2deg)}
+    75%{transform:translate(var(--dx,10px),var(--dy,10px)) rotate(2deg)}
+  }
+  .float-shape{animation:drift var(--dur,10s) ease-in-out infinite;animation-delay:var(--delay,0s);will-change:transform}
+
+  @keyframes spinslow{to{transform:rotate(360deg)}}
+  @keyframes spinslowrev{to{transform:rotate(-360deg)}}
+  .spin-slow{animation:spinslow 70s linear infinite;transform-box:fill-box;transform-origin:50% 50%}
+  .spin-slow-rev{animation:spinslowrev 130s linear infinite;transform-box:fill-box;transform-origin:50% 50%}
+
+  @keyframes pulseglow{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.18);opacity:.82}}
+  .pulse-glow{animation:pulseglow 3.2s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 50%}
+
+  @keyframes scrollcue{0%{transform:translateY(-100%)}60%,100%{transform:translateY(140%)}}
+  .animate-scrollcue{animation:scrollcue 1.8s cubic-bezier(.65,0,.35,1) infinite}
+
+  @keyframes sheen{0%,78%,100%{transform:translateX(-130%)}90%{transform:translateX(130%)}}
+  .btn-sheen{position:relative;overflow:hidden}
+  .btn-sheen::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.4) 50%,transparent 70%);transform:translateX(-130%);animation:sheen 6.5s ease-in-out infinite;pointer-events:none}
+
+  .faq-a-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .5s cubic-bezier(.16,1,.3,1)}
+  .faq-item.open .faq-a-wrap{grid-template-rows:1fr}
+  .faq-a-inner{overflow:hidden}
+  .faq-icon{transition:transform .4s cubic-bezier(.16,1,.3,1)}
+  .faq-item.open .faq-icon{transform:rotate(45deg)}
+
+  @media (prefers-reduced-motion:reduce){
+    .float-shape,.spin-slow,.spin-slow-rev,.pulse-glow,.btn-sheen::after,.animate-scrollcue{animation:none!important}
+    .reveal{transition-duration:.01ms!important;opacity:1!important;transform:none!important}
+  }
+</style>
+</head>
+
+<body class="font-body text-ink antialiased">
+
+<div id="scroll-progress" class="fixed top-0 left-0 h-[3px] bg-gradient-to-r from-[#013B42] via-[#00A7C7] to-[#00D4FF] z-[60]" style="width:0%"></div>
+
+<nav class="fixed top-4 inset-x-0 z-50 px-4" aria-label="Primary">
+  <div class="mx-auto max-w-6xl">
+    <div id="nav-inner" class="nav-glass flex items-center justify-between gap-4 rounded-full px-4 py-2.5 sm:px-6 sm:py-3 border border-white/50 transition-all duration-300">
+      <a href="#home" class="flex items-center gap-2.5 shrink-0">
+        <svg viewBox="0 0 32 32" class="w-8 h-8" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#08131C"/><circle cx="16" cy="16" r="9" fill="none" stroke="#00A7C7" stroke-width="1.4"/><circle cx="16" cy="16" r="4" fill="#00D4FF"/></svg>
+        <span class="font-display font-semibold text-[17px] tracking-tight text-ink">OcuScan <span class="text-accentdim">Pro</span></span>
+      </a>
+      <div class="hidden md:flex items-center gap-8 text-sm text-ink/75">
+        <a href="#how-it-works" class="hover:text-accentdim transition-colors">How it works</a>
+        <a href="#tests" class="hover:text-accentdim transition-colors">Vision tests</a>
+        <a href="#faq" class="hover:text-accentdim transition-colors">FAQ</a>
+        <a href="#about" class="hover:text-accentdim transition-colors">About</a>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="main.html" class="hidden sm:inline-flex items-center rounded-full bg-ink text-white text-sm font-medium px-5 py-2.5 hover:bg-deep transition-colors">Start Screening</a>
+        <button id="menu-btn" type="button" aria-label="Toggle menu" aria-expanded="false" class="md:hidden w-10 h-10 rounded-full flex items-center justify-center border border-ink/10 hover:border-accentdim transition-colors">
+          <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="#08131C" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="mobile-menu" class="hidden md:hidden mt-2 nav-glass rounded-2xl p-4 flex flex-col gap-1 border border-white/50">
+      <a href="#how-it-works" class="px-3 py-2.5 rounded-lg hover:bg-white/60 text-ink/80">How it works</a>
+      <a href="#tests" class="px-3 py-2.5 rounded-lg hover:bg-white/60 text-ink/80">Vision tests</a>
+      <a href="#faq" class="px-3 py-2.5 rounded-lg hover:bg-white/60 text-ink/80">FAQ</a>
+      <a href="#about" class="px-3 py-2.5 rounded-lg hover:bg-white/60 text-ink/80">About</a>
+      <a href="main.html" class="mt-2 text-center rounded-full bg-ink text-white text-sm font-medium px-5 py-3">Start Screening</a>
+    </div>
+  </div>
+</nav>
+
+<header id="home" class="relative overflow-hidden pt-32 sm:pt-40 pb-20 sm:pb-28">
+  <div aria-hidden="true" class="pointer-events-none absolute -top-40 -left-40 w-[520px] h-[520px] rounded-full bg-accentdim/20 blur-[110px] float-shape" style="--dur:22s;--delay:0s;--dx:30px;--dy:20px"></div>
+  <div aria-hidden="true" class="pointer-events-none absolute -bottom-52 -right-40 w-[560px] h-[560px] rounded-full bg-deep/15 blur-[120px] float-shape" style="--dur:26s;--delay:2s;--dx:-25px;--dy:25px"></div>
+  <div aria-hidden="true" class="hidden md:block pointer-events-none absolute top-28 left-[10%] w-2 h-2 rounded-full bg-deep/30 float-shape" style="--dur:9s;--dx:8px;--dy:10px"></div>
+  <div aria-hidden="true" class="hidden md:block pointer-events-none absolute top-52 right-[12%] w-1.5 h-1.5 rounded-full bg-accentdim/40 float-shape" style="--dur:11s;--delay:1s;--dx:-7px;--dy:9px"></div>
+  <div aria-hidden="true" class="hidden md:block pointer-events-none absolute bottom-32 left-[16%] w-2.5 h-2.5 rounded-full bg-accent/25 float-shape" style="--dur:13s;--delay:.5s;--dx:9px;--dy:-8px"></div>
+
+  <div class="relative mx-auto max-w-3xl px-6 text-center">
+
+    <div id="hero-ring" class="relative mx-auto w-[260px] h-[260px] sm:w-[340px] sm:h-[340px] md:w-[400px] md:h-[400px] transition-transform duration-300 ease-out">
+      <svg viewBox="0 0 460 460" class="absolute inset-0 w-full h-full" aria-hidden="true">
+        <circle cx="230" cy="230" r="200" fill="none" stroke="#013B42" stroke-opacity=".16" stroke-width="1.5"/>
+        <circle cx="230" cy="230" r="168" fill="none" stroke="#00A7C7" stroke-opacity=".55" stroke-width="1.4" stroke-dasharray="2 13" class="spin-slow"/>
+        <g id="ring-ticks" class="spin-slow-rev"></g>
+      </svg>
+
+      <div class="float-shape absolute w-8 h-8 sm:w-10 sm:h-10" style="top:-4%;left:14%;--dur:11s;--delay:0s;--dx:14px;--dy:10px" aria-hidden="true">
+        <svg viewBox="0 0 40 40" class="w-full h-full"><path d="M20 4 L34 14 L28 34 L12 34 L6 14 Z" fill="none" stroke="#00A7C7" stroke-width="1.6" stroke-linejoin="round" opacity=".55"/></svg>
+      </div>
+      <div class="float-shape absolute w-10 h-7 sm:w-12 sm:h-8" style="top:3%;right:-3%;--dur:13s;--delay:1.2s;--dx:-10px;--dy:14px" aria-hidden="true">
+        <svg viewBox="0 0 44 30" class="w-full h-full"><path d="M22 2 C10 2 3 10 3 15 C3 20 10 28 22 28 C34 28 41 20 41 15 C41 10 34 2 22 2 Z" fill="none" stroke="#013B42" stroke-width="1.4" opacity=".5"/></svg>
+      </div>
+      <div class="float-shape hidden sm:block absolute w-8 h-8" style="top:35%;left:-8%;--dur:9.5s;--delay:.6s;--dx:12px;--dy:-9px" aria-hidden="true">
+        <svg viewBox="0 0 40 40" class="w-full h-full"><polygon points="20,3 35,11.5 35,28.5 20,37 5,28.5 5,11.5" fill="none" stroke="#4B5C66" stroke-width="1.3" opacity=".45"/></svg>
+      </div>
+      <div class="float-shape absolute w-9 h-9" style="top:30%;right:-9%;--dur:12s;--delay:2s;--dx:-13px;--dy:-11px" aria-hidden="true">
+        <svg viewBox="0 0 40 40" class="w-full h-full"><circle cx="20" cy="20" r="13" fill="none" stroke="#00D4FF" stroke-width="1.4" opacity=".5"/><circle cx="20" cy="20" r="4" fill="#00D4FF" opacity=".35"/></svg>
+      </div>
+      <div class="float-shape absolute w-8 h-8" style="top:60%;left:-5%;--dur:10.5s;--delay:1.5s;--dx:9px;--dy:12px" aria-hidden="true">
+        <svg viewBox="0 0 40 40" class="w-full h-full"><path d="M8 28 A18 18 0 0 1 28 8" fill="none" stroke="#00A7C7" stroke-width="2" stroke-linecap="round" opacity=".5"/></svg>
+      </div>
+      <div class="float-shape hidden sm:block absolute w-7 h-7" style="top:62%;right:-3%;--dur:14s;--delay:.3s;--dx:-8px;--dy:9px" aria-hidden="true">
+        <svg viewBox="0 0 40 40" class="w-full h-full"><circle cx="10" cy="28" r="2.6" fill="#FFB830" opacity=".8"/><circle cx="28" cy="30" r="2" fill="#FFB830" opacity=".55"/><circle cx="22" cy="10" r="2.3" fill="#FFB830" opacity=".7"/></svg>
+      </div>
+
+      <div class="absolute inset-0 flex items-center justify-center">
+        <div class="relative w-[92px] h-[92px] sm:w-[116px] sm:h-[116px]">
+          <span class="absolute top-0 left-0 w-4 h-4 sm:w-5 sm:h-5 border-t-2 border-l-2 border-deep/70 rounded-tl-md"></span>
+          <span class="absolute top-0 right-0 w-4 h-4 sm:w-5 sm:h-5 border-t-2 border-r-2 border-deep/70 rounded-tr-md"></span>
+          <span class="absolute bottom-0 left-0 w-4 h-4 sm:w-5 sm:h-5 border-b-2 border-l-2 border-deep/70 rounded-bl-md"></span>
+          <span class="absolute bottom-0 right-0 w-4 h-4 sm:w-5 sm:h-5 border-b-2 border-r-2 border-deep/70 rounded-br-md"></span>
+          <svg viewBox="0 0 100 60" class="w-full h-full p-5" aria-hidden="true">
+            <path d="M2 30 C 20 4, 80 4, 98 30 C 80 56, 20 56, 2 30 Z" fill="none" stroke="#08131C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="50" cy="30" r="13" fill="none" stroke="#013B42" stroke-width="2"/>
+            <circle cx="50" cy="30" r="5.5" fill="#00D4FF" class="pulse-glow"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <a href="main.html" class="btn-sheen relative -mt-5 sm:-mt-7 inline-flex items-center gap-2.5 rounded-full px-8 py-4 sm:px-10 sm:py-[18px] font-medium text-white text-[15px] sm:text-base shadow-glow hover:shadow-[0_0_70px_-8px_rgba(0,212,255,.7)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300" style="background:linear-gradient(135deg,#08131C 0%,#013B42 45%,#00A7C7 85%,#00D4FF 100%)">
+      Start Free Screening
+      <svg viewBox="0 0 20 20" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h12M11 5l5 5-5 5"/></svg>
+    </a>
+    <div class="mt-3 font-mono text-[11px] tracking-widest uppercase text-mist/80">No sign-up required</div>
+
+    <div class="reveal mt-14">
+      <span class="eyebrow">AI-guided · 6-minute screening</span>
+      <h1 class="mt-5 font-display font-bold tracking-tight text-ink text-[2.5rem] leading-[1.08] sm:text-6xl md:text-7xl">
+        Know your vision,<br>
+        <span class="text-gradient">down to the letter.</span>
+      </h1>
+      <p class="mt-6 max-w-xl mx-auto text-mist text-base sm:text-lg leading-relaxed">
+        A camera-guided screening for visual acuity, contrast sensitivity, near vision, and refractive power — completed on your own screen in about six minutes. No equipment to buy, no appointment to book.
+      </p>
+    </div>
+
+    <a href="#how-it-works" class="mt-16 inline-flex flex-col items-center gap-2 text-mist/70 hover:text-accentdim transition-colors" aria-label="Scroll to learn how it works">
+      <span class="font-mono text-[10px] tracking-[0.3em] uppercase">Scroll</span>
+      <span class="w-px h-10 bg-current opacity-30 relative overflow-hidden block">
+        <span class="absolute inset-x-0 top-0 h-3 bg-accent animate-scrollcue"></span>
+      </span>
+    </a>
+  </div>
+</header>
+
+<section class="bg-white border-y border-ink/5 py-10 sm:py-14">
+  <div class="reveal-group mx-auto max-w-5xl px-6 grid grid-cols-2 sm:grid-cols-4 gap-y-8 gap-x-4 text-center">
+    <div class="reveal">
+      <div class="font-mono font-bold text-3xl sm:text-4xl text-ink">04</div>
+      <div class="mt-2 text-xs sm:text-sm text-mist">Guided vision tests</div>
+    </div>
+    <div class="reveal">
+      <div class="font-mono font-bold text-3xl sm:text-4xl text-ink">~6<span class="text-lg align-top ml-0.5">min</span></div>
+      <div class="mt-2 text-xs sm:text-sm text-mist">Typical session</div>
+    </div>
+    <div class="reveal">
+      <div class="font-mono font-bold text-3xl sm:text-4xl text-ink">0</div>
+      <div class="mt-2 text-xs sm:text-sm text-mist">Extra equipment needed</div>
+    </div>
+    <div class="reveal">
+      <div class="font-mono font-bold text-3xl sm:text-4xl text-ink">1</div>
+      <div class="mt-2 text-xs sm:text-sm text-mist">Camera you already own</div>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works" class="relative bg-paper py-24 sm:py-32">
+  <div class="mx-auto max-w-6xl px-6">
+    <div class="reveal max-w-2xl mx-auto text-center mb-16 sm:mb-20">
+      <span class="eyebrow justify-center">The process</span>
+      <h2 class="mt-5 font-display font-semibold tracking-tight text-ink text-3xl sm:text-4xl md:text-5xl">Three steps. Six minutes. One clear answer.</h2>
+    </div>
+    <div class="reveal-group grid grid-cols-1 md:grid-cols-3 gap-12 md:gap-10">
+      <div class="reveal">
+        <div class="flex items-center gap-4 mb-5">
+          <svg viewBox="0 0 48 48" class="w-11 h-11 shrink-0" aria-hidden="true">
+            <circle cx="24" cy="24" r="18" fill="none" stroke="#013B42" stroke-opacity=".14" stroke-width="3"/>
+            <circle cx="24" cy="24" r="18" fill="none" stroke="#00A7C7" stroke-width="3" stroke-linecap="round" stroke-dasharray="37.7 113.1" transform="rotate(-90 24 24)"/>
+          </svg>
+          <span class="font-mono text-sm font-bold tracking-widest text-accentdim">01</span>
+        </div>
+        <h3 class="font-display font-semibold text-xl text-ink mb-2">Calibrate</h3>
+        <p class="text-mist leading-relaxed text-[15px]">Hold a card-sized object to the screen — or let auto-detect handle it — so every measurement is scaled to real-world size.</p>
+      </div>
+      <div class="reveal">
+        <div class="flex items-center gap-4 mb-5">
+          <svg viewBox="0 0 48 48" class="w-11 h-11 shrink-0" aria-hidden="true">
+            <circle cx="24" cy="24" r="18" fill="none" stroke="#013B42" stroke-opacity=".14" stroke-width="3"/>
+            <circle cx="24" cy="24" r="18" fill="none" stroke="#00A7C7" stroke-width="3" stroke-linecap="round" stroke-dasharray="75.4 113.1" transform="rotate(-90 24 24)"/>
+          </svg>
+          <span class="font-mono text-sm font-bold tracking-widest text-accentdim">02</span>
+        </div>
+        <h3 class="font-display font-semibold text-xl text-ink mb-2">Screen</h3>
+        <p class="text-mist leading-relaxed text-[15px]">Your camera quietly tracks distance and eye position while you complete four short, guided tests.</p>
+      </div>
+      <div class="reveal">
+        <div class="flex items-center gap-4 mb-5">
+          <svg viewBox="0 0 48 48" class="w-11 h-11 shrink-0" aria-hidden="true">
+            <circle cx="24" cy="24" r="18" fill="none" stroke="#013B42" stroke-opacity=".14" stroke-width="3"/>
+            <circle cx="24" cy="24" r="18" fill="none" stroke="#00A7C7" stroke-width="3" stroke-linecap="round" stroke-dasharray="113.1 113.1" transform="rotate(-90 24 24)"/>
+          </svg>
+          <span class="font-mono text-sm font-bold tracking-widest text-accentdim">03</span>
+        </div>
+        <h3 class="font-display font-semibold text-xl text-ink mb-2">Review</h3>
+        <p class="text-mist leading-relaxed text-[15px]">Get a plain-English summary of each result, and a clear read on whether it's time to book an eye exam.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tests" class="bg-white py-24 sm:py-32">
+  <div class="mx-auto max-w-6xl px-6">
+    <div class="reveal max-w-2xl mx-auto text-center mb-16 sm:mb-20">
+      <span class="eyebrow justify-center">What we measure</span>
+      <h2 class="mt-5 font-display font-semibold tracking-tight text-ink text-3xl sm:text-4xl md:text-5xl">Four tests, one sitting.</h2>
+    </div>
+    <div class="reveal-group grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div class="reveal bg-paper rounded-3xl p-7 border border-ink/5 hover:shadow-softxl hover:-translate-y-1 transition-all duration-500">
+        <div class="w-14 h-14 rounded-2xl bg-accentdim/10 flex items-center justify-center mb-6">
+          <svg viewBox="0 0 28 28" class="w-6 h-6" fill="none" stroke="#013B42" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="7" x2="24" y2="7"/><line x1="4" y1="14" x2="18" y2="14"/><line x1="4" y1="21" x2="12" y2="21"/></svg>
+        </div>
+        <h3 class="font-display font-semibold text-lg text-ink mb-2">Visual Acuity</h3>
+        <p class="text-mist text-sm leading-relaxed">The Snellen letter test, reimagined to auto-scale as your distance from the screen changes.</p>
+      </div>
+      <div class="reveal bg-paper rounded-3xl p-7 border border-ink/5 hover:shadow-softxl hover:-translate-y-1 transition-all duration-500">
+        <div class="w-14 h-14 rounded-2xl bg-accentdim/10 flex items-center justify-center mb-6">
+          <svg viewBox="0 0 28 28" class="w-6 h-6" fill="none" stroke="#013B42" stroke-width="2.4" stroke-linecap="round"><circle cx="14" cy="14" r="9" stroke-dasharray="49 7"/></svg>
+        </div>
+        <h3 class="font-display font-semibold text-lg text-ink mb-2">Near Vision</h3>
+        <p class="text-mist text-sm leading-relaxed">A close-range gap-orientation test — the same skill you're using to read this sentence.</p>
+      </div>
+      <div class="reveal bg-paper rounded-3xl p-7 border border-ink/5 hover:shadow-softxl hover:-translate-y-1 transition-all duration-500">
+        <div class="w-14 h-14 rounded-2xl bg-accentdim/10 flex items-center justify-center mb-6">
+          <svg viewBox="0 0 28 28" class="w-6 h-6"><rect x="3" y="6" width="4" height="16" rx="1" fill="#013B42"/><rect x="10" y="6" width="4" height="16" rx="1" fill="#013B42" opacity=".7"/><rect x="17" y="6" width="4" height="16" rx="1" fill="#013B42" opacity=".4"/><rect x="24" y="6" width="2" height="16" rx="1" fill="#013B42" opacity=".18"/></svg>
+        </div>
+        <h3 class="font-display font-semibold text-lg text-ink mb-2">Contrast Sensitivity</h3>
+        <p class="text-mist text-sm leading-relaxed">Finds the point where low-contrast letters start to fade — often the earliest sign something's off.</p>
+      </div>
+      <div class="reveal bg-paper rounded-3xl p-7 border border-ink/5 hover:shadow-softxl hover:-translate-y-1 transition-all duration-500">
+        <div class="w-14 h-14 rounded-2xl bg-accentdim/10 flex items-center justify-center mb-6">
+          <svg viewBox="0 0 28 28" class="w-6 h-6" fill="none" stroke="#013B42" stroke-width="2"><circle cx="14" cy="14" r="10"/><circle cx="14" cy="14" r="4.5" fill="#013B42" stroke="none"/></svg>
+        </div>
+        <h3 class="font-display font-semibold text-lg text-ink mb-2">Refractive Estimate</h3>
+        <p class="text-mist text-sm leading-relaxed">A two-phase blur test that estimates near- or far-sightedness, and by roughly how much.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="about" class="relative overflow-hidden bg-[#E4F5F7] py-24 sm:py-32">
+  <div class="pointer-events-none absolute top-10 right-[8%] w-9 h-9 float-shape opacity-70" style="--dur:12s;--dx:10px;--dy:-8px" aria-hidden="true">
+    <svg viewBox="0 0 40 40" class="w-full h-full"><polygon points="20,3 35,11.5 35,28.5 20,37 5,28.5 5,11.5" fill="none" stroke="#4B5C66" stroke-width="1.3" opacity=".4"/></svg>
+  </div>
+  <div class="pointer-events-none absolute bottom-14 left-[10%] w-8 h-8 float-shape opacity-70" style="--dur:10s;--delay:1s;--dx:-9px;--dy:9px" aria-hidden="true">
+    <svg viewBox="0 0 40 40" class="w-full h-full"><path d="M8 28 A18 18 0 0 1 28 8" fill="none" stroke="#00A7C7" stroke-width="2" stroke-linecap="round" opacity=".5"/></svg>
+  </div>
+
+  <div class="relative mx-auto max-w-3xl px-6 text-center">
+    <span class="reveal eyebrow justify-center">Why OcuScan</span>
+    <h2 class="reveal mt-5 font-display font-semibold tracking-tight text-ink text-3xl sm:text-4xl md:text-5xl">Built to inform your next step — not replace your eye doctor.</h2>
+    <p class="reveal mt-6 text-mist text-base sm:text-lg leading-relaxed">
+      Every test question is generated and scored on the server, so results can't be gamed by the client. Your camera feed never leaves your browser — it's used only to track distance and eye position in real time. OcuScan Pro is a screening tool, not a diagnosis: treat any concerning result as a reason to book a full exam with a licensed optometrist.
+    </p>
+    <div class="reveal-group mt-12 flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
+      <div class="reveal flex items-center gap-2.5 text-ink/80 text-sm font-medium">
+        <svg viewBox="0 0 24 24" class="w-5 h-5 text-deep" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.2"/><line x1="3" y1="3" x2="21" y2="21"/></svg>
+        No camera upload
+      </div>
+      <div class="reveal flex items-center gap-2.5 text-ink/80 text-sm font-medium">
+        <svg viewBox="0 0 24 24" class="w-5 h-5 text-deep" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c.6-3.6 3.6-6 7-6"/><line x1="3" y1="3" x2="21" y2="21"/></svg>
+        No sign-up required
+      </div>
+      <div class="reveal flex items-center gap-2.5 text-ink/80 text-sm font-medium">
+        <svg viewBox="0 0 24 24" class="w-5 h-5 text-deep" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="M8.5 13.5l2 2 4-4.5"/></svg>
+        Screening, not diagnosis
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="bg-white py-24 sm:py-32">
+  <div class="mx-auto max-w-3xl px-6">
+    <div class="reveal text-center mb-14">
+      <span class="eyebrow justify-center">Questions</span>
+      <h2 class="mt-5 font-display font-semibold tracking-tight text-ink text-3xl sm:text-4xl md:text-5xl">Before you start.</h2>
+    </div>
+
+    <div class="reveal-group divide-y divide-ink/10 border-t border-b border-ink/10">
+      <div class="faq-item reveal">
+        <button type="button" class="faq-q w-full flex items-center justify-between gap-4 py-6 text-left" aria-expanded="false">
+          <span class="font-display font-medium text-base sm:text-lg text-ink">Is this a medical diagnosis?</span>
+          <span class="faq-icon shrink-0 w-7 h-7 rounded-full border border-ink/15 flex items-center justify-center text-ink/60 text-lg leading-none">+</span>
+        </button>
+        <div class="faq-a-wrap">
+          <div class="faq-a-inner">
+            <p class="pb-6 pr-10 text-mist leading-relaxed text-[15px]">No. OcuScan Pro is a screening tool that estimates your visual acuity, contrast sensitivity, near vision, and refractive power. Treat a concerning result as a reason to book a full eye exam, not as a prescription.</p>
+          </div>
+        </div>
+      </div>
+      <div class="faq-item reveal">
+        <button type="button" class="faq-q w-full flex items-center justify-between gap-4 py-6 text-left" aria-expanded="false">
+          <span class="font-display font-medium text-base sm:text-lg text-ink">Do I need any special equipment?</span>
+          <span class="faq-icon shrink-0 w-7 h-7 rounded-full border border-ink/15 flex items-center justify-center text-ink/60 text-lg leading-none">+</span>
+        </button>
+        <div class="faq-a-wrap">
+          <div class="faq-a-inner">
+            <p class="pb-6 pr-10 text-mist leading-relaxed text-[15px]">Just a device with a front-facing camera and a bit of arm's length. A credit-card-sized object helps calibrate scale, but auto-detection works on most modern phones and laptops.</p>
+          </div>
+        </div>
+      </div>
+      <div class="faq-item reveal">
+        <button type="button" class="faq-q w-full flex items-center justify-between gap-4 py-6 text-left" aria-expanded="false">
+          <span class="font-display font-medium text-base sm:text-lg text-ink">Is my camera footage stored or sent anywhere?</span>
+          <span class="faq-icon shrink-0 w-7 h-7 rounded-full border border-ink/15 flex items-center justify-center text-ink/60 text-lg leading-none">+</span>
+        </button>
+        <div class="faq-a-wrap">
+          <div class="faq-a-inner">
+            <p class="pb-6 pr-10 text-mist leading-relaxed text-[15px]">No. Your camera feed is processed locally in the browser to track distance and eye position — it's never uploaded. Only your test answers and computed results are sent to the server.</p>
+          </div>
+        </div>
+      </div>
+      <div class="faq-item reveal">
+        <button type="button" class="faq-q w-full flex items-center justify-between gap-4 py-6 text-left" aria-expanded="false">
+          <span class="font-display font-medium text-base sm:text-lg text-ink">How accurate is it compared to an in-clinic exam?</span>
+          <span class="faq-icon shrink-0 w-7 h-7 rounded-full border border-ink/15 flex items-center justify-center text-ink/60 text-lg leading-none">+</span>
+        </button>
+        <div class="faq-a-wrap">
+          <div class="faq-a-inner">
+            <p class="pb-6 pr-10 text-mist leading-relaxed text-[15px]">It's a solid directional read, not a clinical-grade measurement. Screen brightness, camera quality, and lighting all introduce some error, which is why every result comes with a recommendation, not a prescription.</p>
+          </div>
+        </div>
+      </div>
+      <div class="faq-item reveal">
+        <button type="button" class="faq-q w-full flex items-center justify-between gap-4 py-6 text-left" aria-expanded="false">
+          <span class="font-display font-medium text-base sm:text-lg text-ink">How long does it take?</span>
+          <span class="faq-icon shrink-0 w-7 h-7 rounded-full border border-ink/15 flex items-center justify-center text-ink/60 text-lg leading-none">+</span>
+        </button>
+        <div class="faq-a-wrap">
+          <div class="faq-a-inner">
+            <p class="pb-6 pr-10 text-mist leading-relaxed text-[15px]">Most people finish all four tests in five to seven minutes.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="relative overflow-hidden bg-gradient-to-b from-white to-[#DCF1F3] py-28 sm:py-36">
+  <div class="pointer-events-none absolute top-16 left-[14%] w-8 h-8 float-shape" style="--dur:11s;--dx:10px;--dy:8px" aria-hidden="true">
+    <svg viewBox="0 0 40 40" class="w-full h-full"><circle cx="20" cy="20" r="13" fill="none" stroke="#00D4FF" stroke-width="1.4" opacity=".5"/><circle cx="20" cy="20" r="4" fill="#00D4FF" opacity=".35"/></svg>
+  </div>
+  <div class="pointer-events-none absolute bottom-16 right-[14%] w-7 h-7 float-shape" style="--dur:13s;--delay:1s;--dx:-9px;--dy:-8px" aria-hidden="true">
+    <svg viewBox="0 0 40 40" class="w-full h-full"><circle cx="10" cy="28" r="2.6" fill="#FFB830" opacity=".8"/><circle cx="28" cy="30" r="2" fill="#FFB830" opacity=".55"/><circle cx="22" cy="10" r="2.3" fill="#FFB830" opacity=".7"/></svg>
+  </div>
+
+  <div class="reveal relative mx-auto max-w-2xl px-6 text-center">
+    <h2 class="font-display font-bold tracking-tight text-ink text-4xl sm:text-5xl">See where you stand.</h2>
+    <p class="mt-4 text-mist text-base sm:text-lg">Free, private, and over before your coffee gets cold.</p>
+    <a href="main.html" class="btn-sheen relative mt-10 inline-flex items-center gap-2.5 rounded-full px-9 py-4 font-medium text-white text-base shadow-glow hover:shadow-[0_0_70px_-8px_rgba(0,212,255,.7)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300" style="background:linear-gradient(135deg,#08131C 0%,#013B42 45%,#00A7C7 85%,#00D4FF 100%)">
+      Start Free Screening
+      <svg viewBox="0 0 20 20" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h12M11 5l5 5-5 5"/></svg>
+    </a>
+    <div class="mt-5 font-mono text-xs tracking-widest uppercase text-mist/70">Takes about 6 minutes · No sign-up · Works on phone or laptop</div>
+  </div>
+</section>
+
+<footer class="bg-charcoal text-[#A9B4BA] pt-20 pb-8">
+  <div class="reveal mx-auto max-w-6xl px-6">
+    <div class="reveal-group grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-12 pb-14 border-b border-white/10">
+      <div class="reveal col-span-2 md:col-span-1">
+        <div class="flex items-center gap-2.5 mb-4">
+          <svg viewBox="0 0 32 32" class="w-8 h-8" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="#0B0D0F" stroke="#2A2E32"/><circle cx="16" cy="16" r="9" fill="none" stroke="#00A7C7" stroke-width="1.4"/><circle cx="16" cy="16" r="4" fill="#00D4FF"/></svg>
+          <span class="font-display font-semibold text-[17px] text-white">OcuScan Pro</span>
+        </div>
+        <p class="text-sm leading-relaxed max-w-xs">A free, camera-guided vision screening you can run yourself — no equipment, no appointment.</p>
+      </div>
+      <div class="reveal">
+        <h4 class="font-mono text-xs tracking-widest uppercase text-[#7C8790] mb-4">Product</h4>
+        <ul class="space-y-3 text-sm">
+          <li><a href="#how-it-works" class="hover:text-accent transition-colors">How it works</a></li>
+          <li><a href="#tests" class="hover:text-accent transition-colors">Vision tests</a></li>
+          <li><a href="#faq" class="hover:text-accent transition-colors">FAQ</a></li>
+          <li><a href="main.html" class="hover:text-accent transition-colors">Start screening</a></li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <h4 class="font-mono text-xs tracking-widest uppercase text-[#7C8790] mb-4">Company</h4>
+        <ul class="space-y-3 text-sm">
+          <li><a href="#about" class="hover:text-accent transition-colors">About</a></li>
+          <li><a href="#" class="hover:text-accent transition-colors">Contact</a></li>
+        </ul>
+      </div>
+      <div class="reveal">
+        <h4 class="font-mono text-xs tracking-widest uppercase text-[#7C8790] mb-4">Legal</h4>
+        <ul class="space-y-3 text-sm">
+          <li><a href="privacy.html" class="hover:text-accent transition-colors">Privacy Policy</a></li>
+          <li><a href="privacy.html" class="hover:text-accent transition-colors">Terms of Service</a></li>
+          <li><a href="privacy.html" class="hover:text-accent transition-colors">Medical Disclaimer</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-[11px] tracking-wide text-[#7C8790]">
+      <span>© 2026 OcuScan Pro. All rights reserved.</span>
+      <span>Screening tool only — not a substitute for professional eye care.</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  function buildTicks(){
+    var g = document.getElementById('ring-ticks');
+    if(!g) return;
+    var ns = 'http://www.w3.org/2000/svg';
+    var count = 60, cx = 230, cy = 230, r = 214, len = 9;
+    for(var i=0;i<count;i++){
+      var angle = (i/count)*Math.PI*2;
+      var major = i % 5 === 0;
+      var l = major ? len*2 : len;
+      var x1 = cx + Math.cos(angle)*r, y1 = cy + Math.sin(angle)*r;
+      var x2 = cx + Math.cos(angle)*(r-l), y2 = cy + Math.sin(angle)*(r-l);
+      var line = document.createElementNS(ns,'line');
+      line.setAttribute('x1', x1.toFixed(2)); line.setAttribute('y1', y1.toFixed(2));
+      line.setAttribute('x2', x2.toFixed(2)); line.setAttribute('y2', y2.toFixed(2));
+      line.setAttribute('stroke', major ? 'rgba(1,59,66,.5)' : 'rgba(1,59,66,.2)');
+      line.setAttribute('stroke-width', major ? 1.6 : 1);
+      line.setAttribute('stroke-linecap', 'round');
+      g.appendChild(line);
+    }
+  }
+  buildTicks();
+
+  var progress = document.getElementById('scroll-progress');
+  var navInner = document.getElementById('nav-inner');
+  var ticking = false;
+  function onScroll(){
+    var h = document.documentElement;
+    var scrolled = h.scrollTop || document.body.scrollTop;
+    var height = h.scrollHeight - h.clientHeight;
+    var pct = height > 0 ? (scrolled/height)*100 : 0;
+    if(progress) progress.style.width = pct + '%';
+    if(navInner){
+      if(scrolled > 12) navInner.classList.add('nav-scrolled');
+      else navInner.classList.remove('nav-scrolled');
+    }
+    ticking = false;
+  }
+  window.addEventListener('scroll', function(){
+    if(!ticking){ requestAnimationFrame(onScroll); ticking = true; }
+  }, {passive:true});
+  onScroll();
+
+  var reveals = document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if(en.isIntersecting){ en.target.classList.add('in-view'); io.unobserve(en.target); }
+      });
+    }, {threshold:0.12, rootMargin:'0px 0px -60px 0px'});
+    reveals.forEach(function(el){ io.observe(el); });
+  } else {
+    reveals.forEach(function(el){ el.classList.add('in-view'); });
+  }
+
+  var menuBtn = document.getElementById('menu-btn');
+  var mobileMenu = document.getElementById('mobile-menu');
+  if(menuBtn && mobileMenu){
+    menuBtn.addEventListener('click', function(){
+      var nowHidden = mobileMenu.classList.toggle('hidden');
+      menuBtn.setAttribute('aria-expanded', String(!nowHidden));
+      document.body.classList.toggle('overflow-hidden', !nowHidden);
+    });
+    mobileMenu.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click', function(){
+        mobileMenu.classList.add('hidden');
+        menuBtn.setAttribute('aria-expanded','false');
+        document.body.classList.remove('overflow-hidden');
+      });
+    });
+  }
+
+  document.querySelectorAll('.faq-item').forEach(function(item){
+    var btn = item.querySelector('.faq-q');
+    if(!btn) return;
+    btn.addEventListener('click', function(){
+      var isOpen = item.classList.contains('open');
+      document.querySelectorAll('.faq-item.open').forEach(function(other){
+        if(other !== item){
+          other.classList.remove('open');
+          var b = other.querySelector('.faq-q');
+          if(b) b.setAttribute('aria-expanded','false');
+        }
+      });
+      item.classList.toggle('open', !isOpen);
+      btn.setAttribute('aria-expanded', String(!isOpen));
+    });
+  });
+
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var fine = window.matchMedia('(pointer: fine)').matches;
+  var ring = document.getElementById('hero-ring');
+  if(ring && fine && !reduceMotion){
+    var rect, cx, cy, raf;
+    function measure(){ rect = ring.getBoundingClientRect(); cx = rect.left + rect.width/2; cy = rect.top + rect.height/2; }
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('mousemove', function(e){
+      if(raf) return;
+      raf = requestAnimationFrame(function(){
+        var dx = (e.clientX - cx) / rect.width, dy = (e.clientY - cy) / rect.height;
+        ring.style.transform = 'rotate(' + (dx*2.4) + 'deg) translate(' + (dx*8) + 'px,' + (dy*8) + 'px)';
+        raf = null;
+      });
+    }, {passive:true});
+    document.addEventListener('mouseleave', function(){ ring.style.transform = ''; });
+  }
+
+  window.addEventListener('load', onScroll);
+})();
+</script>
+
+</body>
+</html>
